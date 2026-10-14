@@ -75,7 +75,6 @@ async function checkWebsite(site) {
   const previousStatus = site.status;
   const failures = isUp ? 0 : site.consecutive_failures + 1;
 
-  // Un seul échec ne suffit pas à confirmer une panne.
   let newStatus = isUp ? "up" : failures >= 2 ? "down" : previousStatus;
 
   const { error: historyError } = await supabaseAdmin
