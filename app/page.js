@@ -1,69 +1,99 @@
-import Image from "next/image";
+import Link from "next/link";
 import styles from "./page.module.css";
 
 export default function Home() {
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>
-            To get started, edit the{" "}
-            <code className={styles.code}>page.js</code> file.
-          </h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className={styles.page}>
+      <nav className={styles.navbar}>
+        <Link href="/" className={styles.logo}>
+          <span className={styles.logoIcon}>S</span>
+          <span>
+            SITE<span className={styles.logoAccent}>MONITOR</span>
+          </span>
+        </Link>
+
+        <Link href="/dashboard" className={styles.navLink}>
+          Dashboard <span aria-hidden="true">↗</span>
+        </Link>
+      </nav>
+
+      <section className={styles.hero}>
+        <div className={styles.glow} aria-hidden="true" />
+
+        <div className={styles.badge}>
+          <span className={styles.statusDot} />
+          SURVEILLANCE DE SITES WEB
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <h1 className={styles.title}>
+          Tes sites web.
+          <br />
+          <span>Gardés à l’œil.</span>
+        </h1>
+
+        <p className={styles.description}>
+          Surveille l'état de tes sites web depuis un seul espace. Consulte leur
+          disponibilité, les derniers contrôles et les éventuelles
+          interruptions.
+        </p>
+
+        <div className={styles.actions}>
+          <Link href="/dashboard" className={styles.primaryButton}>
+            Accéder au dashboard
+            <span aria-hidden="true">→</span>
+          </Link>
         </div>
-      </main>
-    </div>
+
+        <div className={styles.preview}>
+          <div className={styles.previewHeader}>
+            <div className={styles.windowDots}>
+              <span />
+              <span />
+              <span />
+            </div>
+            <span className={styles.previewLabel}>APERÇU DU MONITORING</span>
+            <span className={styles.liveBadge}>
+              <span className={styles.statusDot} />
+              MONITORING
+            </span>
+          </div>
+
+          <div className={styles.previewBody}>
+            <div className={styles.previewText}>
+              <span>DISPONIBILITÉ</span>
+              <strong>En un coup d’œil.</strong>
+              <p>Un espace centralisé pour tes sites.</p>
+            </div>
+
+            <div className={styles.previewIcon} aria-hidden="true">
+              <svg
+                viewBox="0 0 48 48"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M5 25H14L20 12L28 36L34 22H43"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+          </div>
+
+          <div className={styles.previewFooter}>
+            <span>ÉTAT DES SITES</span>
+            <span>HISTORIQUE DES CONTRÔLES</span>
+            <span>ALERTES EMAIL</span>
+          </div>
+        </div>
+      </section>
+
+      <footer className={styles.footer}>
+        <span>© {new Date().getFullYear()} SITE MONITOR</span>
+        <span>Simple. Clair. Efficace.</span>
+      </footer>
+    </main>
   );
 }
