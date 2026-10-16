@@ -1,0 +1,84 @@
+.chart {
+  width: 100%;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  color: #aaa;
+  font-size: 11px;
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffad4d;
+}
+
+.scroll {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-color: #444 transparent;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  min-width: 540px;
+  overflow: visible;
+}
+
+.grid {
+  stroke: #292929;
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+}
+
+.axis {
+  fill: #777;
+  font-size: 10px;
+}
+
+.bar {
+  fill: #ffad4d;
+  opacity: 0.16;
+}
+
+.line {
+  fill: none;
+  stroke: #ffad4d;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.point {
+  fill: #ffad4d;
+  stroke: #101010;
+  stroke-width: 1.5;
+}
+
+.empty {
+  padding: 35px 12px;
+  color: #888;
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .svg {
+    min-width: 600px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar,
+  .line,
+  .point {
+    animation: none;
+    transition: none;
+  }
+}
