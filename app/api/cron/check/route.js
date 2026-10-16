@@ -231,8 +231,19 @@ async function checkWebsite(site) {
       const isRedirect = [301, 302, 303, 307, 308].includes(statusCode);
 
       if (!isRedirect) {
+        // Récupérer les headers de la réponse finale pour le contrôle de sécurité.
         securityHeaders = response.headers;
         securityIsHttps = url.protocol === "https:";
+
+        // Conserver le contrôle HTTP existant.
+        isUp = statusCode < 500;
+
+        if (!isUp) {
+          errorMessage = `Erreur HTTP ${statusCode}`;
+        }
+
+        await response.body?.cancel().catch(() => {});
+        break;
       }
 
       const location = response.headers.get("location");
