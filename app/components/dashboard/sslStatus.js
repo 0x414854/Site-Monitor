@@ -67,8 +67,36 @@ function StatusBadge({ label, className }) {
 }
 
 export default function SslStatus({ checks = [] }) {
+  // Garder uniquement le contrôle le plus récent de chaque site.
+  const latestChecks = [
+    ...checks
+      .reduce((latestByWebsite, check) => {
+        const websiteId = check.website_id;
+
+        if (!websiteId) return latestByWebsite;
+
+        const existing = latestByWebsite.get(websiteId);
+
+        if (
+          !existing ||
+          new Date(check.checked_at).getTime() >
+            new Date(existing.checked_at).getTime() ||
+          (new Date(check.checked_at).getTime() ===
+            new Date(existing.checked_at).getTime() &&
+            check.id > existing.id)
+        ) {
+          latestByWebsite.set(websiteId, check);
+        }
+
+        return latestByWebsite;
+      }, new Map())
+      .values(),
+  ];
+
   const errors = [
-    ...new Set(checks.map((check) => check.error_message).filter(Boolean)),
+    ...new Set(
+      latestChecks.map((check) => check.error_message).filter(Boolean),
+    ),
   ];
 
   return (
@@ -101,11 +129,11 @@ export default function SslStatus({ checks = [] }) {
         </div>
 
         <span className={styles.count}>
-          {checks.length} contrôle{checks.length > 1 ? "s" : ""}
+          {latestChecks.length} contrôle{latestChecks.length > 1 ? "s" : ""}
         </span>
       </header>
 
-      {checks.length === 0 ? (
+      {latestChecks.length === 0 ? (
         <div className={styles.empty}>
           <span className={styles.emptyIcon} aria-hidden="true">
             <svg
@@ -147,7 +175,7 @@ export default function SslStatus({ checks = [] }) {
               </thead>
 
               <tbody>
-                {checks.map((check) => {
+                {latestChecks.map((check) => {
                   const website = Array.isArray(check.websites)
                     ? check.websites[0]
                     : check.websites;

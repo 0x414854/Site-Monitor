@@ -4,16 +4,24 @@ import { useState } from "react";
 import styles from "@/styles/components/dashboard/securityHeaderStatus.module.css";
 
 function formatDate(value) {
-  if (!value) return "Jamais";
+  if (!value) return "Indisponible";
 
   const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Indisponible";
 
-  if (Number.isNaN(date.getTime())) return "Date inconnue";
+  const parts = new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "Europe/Paris",
+  }).formatToParts(date);
 
-  return new Intl.DateTimeFormat("fr-FR", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  const get = (type) => parts.find((part) => part.type === type)?.value ?? "";
+
+  return `${get("day")} ${get("month")} ${get("year")} à ${get("hour")}:${get("minute")}`;
 }
 
 function getScoreLabel(score) {
