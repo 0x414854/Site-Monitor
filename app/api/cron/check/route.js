@@ -205,13 +205,16 @@ async function checkWebsite(site) {
   let statusCode = null;
   let errorMessage = null;
   let isUp = false;
+  // 3. Contrôle SSL, historique et alertes
+  let sslSaved = false;
+  let sslAlert = { sent: false, reason: "not_checked" };
+  let securityHeaders = null;
+  let securityIsHttps = false;
 
   // 1. Contrôle HTTP existant
   try {
     let url = await validatePublicUrl(site.url);
     const signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-    let securityHeaders = null;
-    let securityIsHttps = false;
 
     for (let redirects = 0; ; redirects += 1) {
       const response = await fetch(url.toString(), {
@@ -228,14 +231,8 @@ async function checkWebsite(site) {
       const isRedirect = [301, 302, 303, 307, 308].includes(statusCode);
 
       if (!isRedirect) {
-        isUp = statusCode < 500;
-
-        if (!isUp) {
-          errorMessage = `Erreur HTTP ${statusCode}`;
-        }
-
-        await response.body?.cancel().catch(() => {});
-        break;
+        securityHeaders = response.headers;
+        securityIsHttps = url.protocol === "https:";
       }
 
       const location = response.headers.get("location");
@@ -275,10 +272,6 @@ async function checkWebsite(site) {
   if (error) {
     throw new Error(`Échec de l'enregistrement Supabase : ${error.message}`);
   }
-
-  // 3. Contrôle SSL, historique et alertes
-  let sslSaved = false;
-  let sslAlert = { sent: false, reason: "not_checked" };
 
   try {
     const sslResult = await checkSsl(site.url);
