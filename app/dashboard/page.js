@@ -4,6 +4,7 @@ import styles from "@/styles/page/dashboard.module.css";
 import WebsiteManager from "../components/dashboard/websiteManager";
 import IncidentHistory from "../components/dashboard/incidentHistory";
 import SslStatus from "../components/dashboard/sslStatus";
+import SecurityHeadersStatus from "../components/dashboard/securityHeaderStatus";
 
 export const dynamic = "force-dynamic";
 
@@ -114,6 +115,7 @@ export default async function DashboardPage() {
     { data: recentChecks, error: recentChecksError },
     { data: incidents, error: incidentsError },
     { data: sslChecks, error: sslChecksError },
+    { data: securityChecks, error: securityChecksError },
   ] = await Promise.all([
     supabaseAdmin
       .from("websites")
@@ -154,6 +156,30 @@ export default async function DashboardPage() {
       .select("*, websites(client_name, url)")
       .order("checked_at", { ascending: false })
       .limit(50),
+
+    supabaseAdmin
+      .from("website_security_checks")
+      .select(
+        `
+    id,
+    website_id,
+    checked_at,
+    https_used,
+    hsts_present,
+    csp_present,
+    nosniff_present,
+    iframe_protection_present,
+    cookies_checked,
+    cookie_findings,
+    findings,
+    security_score,
+    website:websites (
+      url,
+      client_name
+    )
+  `,
+      )
+      .order("checked_at", { ascending: false }),
   ]);
 
   const error =
@@ -161,7 +187,8 @@ export default async function DashboardPage() {
     checksError ||
     recentChecksError ||
     incidentsError ||
-    sslChecksError;
+    sslChecksError ||
+    securityChecksError;
 
   if (error) {
     console.error("Erreur dashboard Supabase :", error.message);
@@ -355,6 +382,7 @@ export default async function DashboardPage() {
         <WebsiteManager websites={siteList} />
         <IncidentHistory incidents={incidentList} />
         <SslStatus checks={sslChecks ?? []} />
+        <SecurityHeadersStatus checks={securityChecks} />
 
         <section className={styles.chartSection}>
           <div className={styles.sectionHeading}>

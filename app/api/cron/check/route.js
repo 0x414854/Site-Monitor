@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { supabaseAdmin } from "@/utils/supabase/clients";
 import { validatePublicUrl } from "@/utils/monitor/validate-url";
 import { checkSsl } from "@/utils/monitor/check-ssl";
+import { checkSecurityHeaders } from "@/utils/monitor/checkSecurityHeaders";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,192 @@ export const maxDuration = 60;
 const BATCH_SIZE = 5;
 const REQUEST_TIMEOUT_MS = 8000;
 const MAX_REDIRECTS = 4;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Envoie une alerte lorsque le certificat SSL approche de son expiration.
+ * La table website_ssl_alerts empêche les doublons.
+ */
+async function sendSslExpirationAlert(site, sslResult) {
+  const expiresAt = sslResult?.certificate_expires_at;
+  const recipient = site.notification_email;
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.ALERT_FROM_EMAIL;
+
+  if (!expiresAt || !recipient) {
+    return { sent: false, reason: "missing_expiry_or_recipient" };
+  }
+
+  if (!apiKey || !from) {
+    console.error(`[SSL] Configuration Resend manquante pour ${site.url}`);
+    return { sent: false, reason: "missing_email_configuration" };
+  }
+
+  const expiryTimestamp = new Date(expiresAt).getTime();
+
+  if (!Number.isFinite(expiryTimestamp)) {
+    console.error(`[SSL] Date d'expiration invalide pour ${site.url}`);
+    return { sent: false, reason: "invalid_expiry_date" };
+  }
+
+  const now = Date.now();
+  const millisecondsLeft = expiryTimestamp - now;
+  const daysLeft = millisecondsLeft / DAY_MS;
+
+  let alertType;
+  let alertLabel;
+
+  if (daysLeft <= 0) {
+    alertType = "expired";
+    alertLabel = "Certificat SSL expiré";
+  } else if (daysLeft <= 1) {
+    alertType = "d1";
+    alertLabel = "Expiration du certificat SSL dans moins de 24 heures";
+  } else if (daysLeft <= 3) {
+    alertType = "d3";
+    alertLabel = "Expiration du certificat SSL dans 3 jours ou moins";
+  } else if (daysLeft <= 7) {
+    alertType = "d7";
+    alertLabel = "Expiration du certificat SSL dans 7 jours ou moins";
+  } else if (daysLeft <= 14) {
+    alertType = "d14";
+    alertLabel = "Expiration du certificat SSL dans 14 jours ou moins";
+  } else {
+    return { sent: false, reason: "not_due" };
+  }
+
+  const formattedExpiry = new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "long",
+    timeStyle: "short",
+    timeZone: "Europe/Paris",
+  }).format(new Date(expiryTimestamp));
+
+  // Réserver l'alerte avant l'envoi pour éviter les doublons.
+  const { error: reservationError } = await supabaseAdmin
+    .from("website_ssl_alerts")
+    .insert({
+      website_id: site.id,
+      certificate_expires_at: new Date(expiryTimestamp).toISOString(),
+      alert_type: alertType,
+    });
+
+  if (reservationError) {
+    if (reservationError.code === "23505") {
+      return { sent: false, reason: "already_alerted" };
+    }
+
+    console.error(
+      `[SSL] Impossible de réserver l'alerte pour ${site.url} :`,
+      reservationError.message,
+    );
+
+    return { sent: false, reason: "reservation_failed" };
+  }
+
+  const certificateStatus =
+    sslResult.certificate_valid === true
+      ? "Valide"
+      : sslResult.certificate_valid === false
+        ? "Invalide"
+        : "Indéterminé";
+
+  const hostnameStatus =
+    sslResult.hostname_match === true
+      ? "Concordant"
+      : sslResult.hostname_match === false
+        ? "Non concordant"
+        : "Indéterminé";
+
+  const httpsStatus = sslResult.https_reachable ? "Accessible" : "Inaccessible";
+
+  const redirectStatus =
+    sslResult.http_redirects_to_https === true
+      ? "Oui"
+      : sslResult.http_redirects_to_https === false
+        ? "Non"
+        : "Indéterminé";
+
+  const subject = `[Alerte SSL] ${site.url} — ${alertLabel}`;
+
+  const body = [
+    "Alerte de surveillance SSL",
+    "",
+    alertLabel,
+    "",
+    `Site : ${site.url}`,
+    `Client : ${site.client_name || "Non renseigné"}`,
+    `Date d'expiration : ${formattedExpiry}`,
+    `État : ${daysLeft <= 0 ? "Certificat expiré" : `Environ ${Math.ceil(daysLeft)} jour(s) restant(s)`}`,
+    "",
+    "Détails du contrôle :",
+    `HTTPS accessible : ${httpsStatus}`,
+    `Certificat valide : ${certificateStatus}`,
+    `Nom d'hôte correspondant : ${hostnameStatus}`,
+    `Redirection HTTP vers HTTPS : ${redirectStatus}`,
+    `Détail de l'erreur SSL : ${sslResult.error_message || "Aucune erreur signalée"}`,
+    "",
+    "Veuillez vérifier le certificat et le renouveler si nécessaire.",
+  ].join("\n");
+
+  const resend = new Resend(apiKey);
+
+  try {
+    const { error: emailError } = await resend.emails.send({
+      from,
+      to: [recipient],
+      subject,
+      text: body,
+    });
+
+    if (emailError) {
+      throw new Error(emailError.message);
+    }
+
+    const { error: updateError } = await supabaseAdmin
+      .from("website_ssl_alerts")
+      .update({ sent_at: new Date().toISOString() })
+      .eq("website_id", site.id)
+      .eq("certificate_expires_at", new Date(expiryTimestamp).toISOString())
+      .eq("alert_type", alertType);
+
+    if (updateError) {
+      console.error(
+        `[SSL] E-mail envoyé, mais mise à jour de l'alerte impossible pour ${site.url} :`,
+        updateError.message,
+      );
+    }
+
+    console.log(`[SSL] Alerte ${alertType} envoyée pour ${site.url}`);
+
+    return { sent: true, alertType };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Erreur Resend inconnue";
+
+    console.error(
+      `[SSL] Échec d'envoi de l'alerte pour ${site.url} :`,
+      message,
+    );
+
+    // Supprimer la réservation en cas d'échec d'envoi pour permettre
+    // une nouvelle tentative lors du prochain passage du cron.
+    const { error: deleteError } = await supabaseAdmin
+      .from("website_ssl_alerts")
+      .delete()
+      .eq("website_id", site.id)
+      .eq("certificate_expires_at", new Date(expiryTimestamp).toISOString())
+      .eq("alert_type", alertType);
+
+    if (deleteError) {
+      console.error(
+        `[SSL] Impossible de libérer la réservation pour ${site.url} :`,
+        deleteError.message,
+      );
+    }
+
+    return { sent: false, reason: "email_failed" };
+  }
+}
 
 async function checkWebsite(site) {
   const startedAt = Date.now();
@@ -19,9 +206,12 @@ async function checkWebsite(site) {
   let errorMessage = null;
   let isUp = false;
 
+  // 1. Contrôle HTTP existant
   try {
     let url = await validatePublicUrl(site.url);
     const signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+    let securityHeaders = null;
+    let securityIsHttps = false;
 
     for (let redirects = 0; ; redirects += 1) {
       const response = await fetch(url.toString(), {
@@ -59,7 +249,7 @@ async function checkWebsite(site) {
         throw new Error("Trop de redirections");
       }
 
-      // Valide aussi la destination de chaque redirection.
+      // Valider également chaque destination de redirection.
       url = await validatePublicUrl(new URL(location, url).toString());
     }
   } catch (error) {
@@ -73,8 +263,7 @@ async function checkWebsite(site) {
 
   const responseMs = Date.now() - startedAt;
 
-  // L'enregistrement de l'historique, du statut et de la transition
-  // se fait dans une seule transaction SQL.
+  // 2. Enregistrement HTTP existant
   const { data, error } = await supabaseAdmin.rpc("record_website_check", {
     p_website_id: site.id,
     p_is_up: isUp,
@@ -87,8 +276,9 @@ async function checkWebsite(site) {
     throw new Error(`Échec de l'enregistrement Supabase : ${error.message}`);
   }
 
-  // Contrôle SSL indépendant du contrôle de disponibilité.
+  // 3. Contrôle SSL, historique et alertes
   let sslSaved = false;
+  let sslAlert = { sent: false, reason: "not_checked" };
 
   try {
     const sslResult = await checkSsl(site.url);
@@ -114,10 +304,53 @@ async function checkWebsite(site) {
       sslSaved = true;
       console.log(`[SSL] Contrôle enregistré pour ${site.url}`);
     }
+
+    // L'envoi d'alerte est indépendant de l'enregistrement de l'historique SSL.
+    sslAlert = await sendSslExpirationAlert(site, sslResult);
   } catch (sslError) {
     console.error(
       `[SSL] Échec du contrôle pour ${site.url} :`,
       sslError instanceof Error ? sslError.message : "Erreur inconnue",
+    );
+  }
+
+  let securitySaved = false;
+  let securityResult = null;
+
+  try {
+    if (securityHeaders) {
+      securityResult = checkSecurityHeaders(securityHeaders, securityIsHttps);
+
+      const { error: securityError } = await supabaseAdmin
+        .from("website_security_checks")
+        .insert({
+          website_id: site.id,
+          https_used: securityResult.https_used,
+          hsts_present: securityResult.hsts_present,
+          csp_present: securityResult.csp_present,
+          nosniff_present: securityResult.nosniff_present,
+          iframe_protection_present: securityResult.iframe_protection_present,
+          cookies_checked: securityResult.cookies_checked,
+          cookie_findings: securityResult.cookie_findings,
+          findings: securityResult.findings,
+          security_score: securityResult.security_score,
+        });
+
+      if (securityError) {
+        console.error(
+          `[Security] Échec d'enregistrement pour ${site.url} :`,
+          securityError.message,
+        );
+      } else {
+        securitySaved = true;
+      }
+    }
+  } catch (securityError) {
+    console.error(
+      `[Security] Erreur pour ${site.url} :`,
+      securityError instanceof Error
+        ? securityError.message
+        : "Erreur inconnue",
     );
   }
 
@@ -127,6 +360,9 @@ async function checkWebsite(site) {
     httpStatus: statusCode,
     responseMs,
     sslSaved,
+    sslAlert,
+    securitySaved,
+    securityScore: securityResult?.security_score ?? null,
   };
 }
 
