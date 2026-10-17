@@ -5,6 +5,7 @@ import WebsiteManager from "../components/dashboard/websiteManager";
 import IncidentHistory from "../components/dashboard/incidentHistory";
 import SslStatus from "../components/dashboard/sslStatus";
 import SecurityHeadersStatus from "../components/dashboard/securityHeaderStatus";
+import IntegrityStatus from "../components/dashboard/integrityStatus";
 
 export const dynamic = "force-dynamic";
 
@@ -116,6 +117,7 @@ export default async function DashboardPage() {
     { data: incidents, error: incidentsError },
     { data: sslChecks, error: sslChecksError },
     { data: securityChecks, error: securityChecksError },
+    { data: integrityScans, error: integrityScansError },
   ] = await Promise.all([
     supabaseAdmin
       .from("websites")
@@ -180,7 +182,56 @@ export default async function DashboardPage() {
   `,
       )
       .order("checked_at", { ascending: false }),
+
+    supabaseAdmin
+      .from("website_integrity_scans")
+      .select(
+        `
+    id,
+    website_id,
+    started_at,
+    finished_at,
+    status,
+    pages_checked,
+    links_checked,
+    findings_count,
+    error_message,
+    websites(client_name, url)
+  `,
+      )
+      .order("started_at", { ascending: false })
+      .limit(50),
   ]);
+
+  const scanList = integrityScans ?? [];
+  const scanIds = scanList.map((scan) => scan.id);
+
+  let integrityFindings = [];
+  let integrityFindingsError = null;
+
+  if (scanIds.length > 0) {
+    const result = await supabaseAdmin
+      .from("website_integrity_findings")
+      .select(
+        `
+      id,
+      scan_id,
+      category,
+      severity,
+      url,
+      status_code,
+      message,
+      details,
+      created_at
+    `,
+      )
+      .in("scan_id", scanIds)
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    integrityFindings = result.data ?? [];
+    integrityFindingsError = result.error;
+  }
 
   const error =
     websitesError ||
@@ -188,7 +239,8 @@ export default async function DashboardPage() {
     recentChecksError ||
     incidentsError ||
     sslChecksError ||
-    securityChecksError;
+    securityChecksError ||
+    integrityScansError;
 
   if (error) {
     console.error("Erreur dashboard Supabase :", error.message);
@@ -383,6 +435,11 @@ export default async function DashboardPage() {
         <IncidentHistory incidents={incidentList} />
         <SslStatus checks={sslChecks ?? []} />
         <SecurityHeadersStatus checks={securityChecks} />
+        <IntegrityStatus
+          websites={siteList}
+          scans={scanList}
+          findings={integrityFindings}
+        />
 
         <section className={styles.chartSection}>
           <div className={styles.sectionHeading}>

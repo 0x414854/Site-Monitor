@@ -25,7 +25,6 @@ function normalizeUrl(value) {
   const url = new URL(value);
   url.hash = "";
 
-  // Ignore common tracking parameters.
   for (const key of [...url.searchParams.keys()]) {
     if (/^(utm_|fbclid|gclid)/i.test(key)) {
       url.searchParams.delete(key);
@@ -33,6 +32,94 @@ function normalizeUrl(value) {
   }
 
   return url.href;
+}
+
+function normalizePathname(pathname) {
+  const normalized = pathname.replace(/\/+$/, "");
+  return normalized || "/";
+}
+
+function stripLocalePrefix(pathname, localePrefixes) {
+  const segments = pathname.split("/");
+  const firstSegment = (segments[1] || "").toLowerCase();
+
+  if (!localePrefixes.has(firstSegment)) {
+    return {
+      pathname: normalizePathname(pathname),
+      hadLocale: false,
+    };
+  }
+
+  const remainingPath = `/${segments.slice(2).join("/")}`;
+
+  return {
+    pathname: normalizePathname(remainingPath),
+    hadLocale: true,
+  };
+}
+
+/**
+ * Reconnaît les redirections de langue attendues.
+ *
+ * Règles :
+ * - "/" doit rediriger vers "/{defaultLocale}".
+ * - "/page" vers "/fr/page", "/en/page" ou "/pt/page"
+ *   est considéré comme une redirection de langue si le chemin
+ *   reste identique après retrait du préfixe.
+ * - Une redirection vers un autre domaine n'est jamais ignorée.
+ * - Une langue non configurée n'est pas considérée comme valide.
+ */
+function isExpectedLocaleRedirect(
+  redirect,
+  rootOrigin,
+  localePrefixes,
+  defaultLocale,
+) {
+  if (localePrefixes.size === 0) return false;
+
+  try {
+    const from = new URL(redirect.from);
+    const to = new URL(redirect.to);
+
+    if (from.origin !== rootOrigin || to.origin !== rootOrigin) {
+      return false;
+    }
+
+    const sourcePath = normalizePathname(from.pathname);
+    const destinationPath = normalizePathname(to.pathname);
+
+    const normalizedDefaultLocale =
+      typeof defaultLocale === "string"
+        ? defaultLocale.trim().toLowerCase()
+        : "";
+
+    // La racine doit aller vers la langue par défaut configurée.
+    // Exemple : "/" -> "/fr" est normal si default_locale = "fr".
+    // Exemple : "/" -> "/en" est une anomalie dans cette configuration.
+    if (sourcePath === "/") {
+      return (
+        normalizedDefaultLocale !== "" &&
+        localePrefixes.has(normalizedDefaultLocale) &&
+        destinationPath === `/${normalizedDefaultLocale}`
+      );
+    }
+
+    const source = stripLocalePrefix(from.pathname, localePrefixes);
+
+    const destination = stripLocalePrefix(to.pathname, localePrefixes);
+
+    // Il faut qu'au moins une des URL ait un préfixe de langue connu.
+    if (!source.hadLocale && !destination.hadLocale) {
+      return false;
+    }
+
+    // Le chemin de la page doit rester identique.
+    // Exemple : "/reviews" -> "/fr/reviews" : normal.
+    // Exemple : "/services" -> "/fr/contact" : anomalie.
+    return source.pathname === destination.pathname;
+  } catch {
+    return false;
+  }
 }
 
 function isHtml(response) {
@@ -45,7 +132,7 @@ async function cancelBody(response) {
   try {
     await response.body?.cancel();
   } catch {
-    // Ignore cancellation errors.
+    // Ignore les erreurs d'annulation.
   }
 }
 
@@ -59,6 +146,7 @@ async function readLimitedText(response) {
   try {
     while (total < MAX_HTML_BYTES) {
       const { done, value } = await reader.read();
+
       if (done) break;
 
       const remaining = MAX_HTML_BYTES - total;
@@ -73,7 +161,7 @@ async function readLimitedText(response) {
     try {
       await reader.cancel();
     } catch {
-      // Ignore cancellation errors.
+      // Ignore les erreurs d'annulation.
     }
   }
 
@@ -89,8 +177,8 @@ async function readLimitedText(response) {
 }
 
 /**
- * Validate every URL before requesting it.
- * Redirects are handled manually, never automatically.
+ * Valide chaque URL avant de la requêter.
+ * Les redirections sont suivies manuellement.
  */
 async function safeRequest(input, method = "GET") {
   let current = new URL(await validatePublicUrl(input));
@@ -98,7 +186,6 @@ async function safeRequest(input, method = "GET") {
   const redirects = [];
 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    // Revalidate the current URL before each request.
     current = new URL(await validatePublicUrl(current.href));
 
     const controller = new AbortController();
@@ -128,7 +215,12 @@ async function safeRequest(input, method = "GET") {
       response.status > 399 ||
       response.status === 304
     ) {
-      return { response, original, finalUrl: current.href, redirects };
+      return {
+        response,
+        original,
+        finalUrl: current.href,
+        redirects,
+      };
     }
 
     const location = response.headers.get("location");
@@ -155,6 +247,8 @@ async function safeRequest(input, method = "GET") {
     }
 
     const next = new URL(location, current);
+
+    // Chaque destination de redirection doit être validée.
     await validatePublicUrl(next.href);
 
     redirects.push({
@@ -193,7 +287,7 @@ function finding(
   };
 }
 
-async function checkPage(url, rootOrigin) {
+async function checkPage(url, rootOrigin, localePrefixes, defaultLocale) {
   const result = await safeRequest(url);
 
   if (!result.response) {
@@ -218,15 +312,28 @@ async function checkPage(url, rootOrigin) {
   const { response } = result;
   const findings = [];
 
+  // Enregistrer les redirections anormales seulement.
   for (const redirect of result.redirects) {
+    const expected = isExpectedLocaleRedirect(
+      redirect,
+      rootOrigin,
+      localePrefixes,
+      defaultLocale,
+    );
+
+    if (expected) continue;
+
     findings.push(
       finding(
         "redirect",
-        redirect.to.startsWith(rootOrigin) ? "info" : "medium",
+        redirect.to.startsWith(rootOrigin) ? "medium" : "high",
         redirect.from,
         `Redirection HTTP ${redirect.status} vers ${redirect.to}`,
         redirect.status,
-        { destination: redirect.to },
+        {
+          destination: redirect.to,
+          expected_locale_redirect: false,
+        },
       ),
     );
   }
@@ -239,17 +346,31 @@ async function checkPage(url, rootOrigin) {
         url,
         `La page retourne HTTP ${response.status}`,
         response.status,
+        {
+          finalUrl: result.finalUrl,
+        },
       ),
     );
 
     await cancelBody(response);
 
-    return { url, links: [], findings };
+    return {
+      url,
+      finalUrl: result.finalUrl,
+      links: [],
+      findings,
+    };
   }
 
   if (!isHtml(response)) {
     await cancelBody(response);
-    return { url, links: [], findings };
+
+    return {
+      url,
+      finalUrl: result.finalUrl,
+      links: [],
+      findings,
+    };
   }
 
   const html = await readLimitedText(response);
@@ -271,7 +392,7 @@ async function checkPage(url, rootOrigin) {
 
       links.push(normalizeUrl(link.href));
     } catch {
-      // Ignore malformed links.
+      // Ignore les liens mal formés.
     }
   });
 
@@ -292,7 +413,6 @@ async function probeSensitiveFiles(baseUrl) {
     try {
       let result = await safeRequest(url, "HEAD");
 
-      // Some servers do not implement HEAD.
       if (result.response?.status === 405) {
         await cancelBody(result.response);
         result = await safeRequest(url, "GET");
@@ -303,7 +423,6 @@ async function probeSensitiveFiles(baseUrl) {
       const { status } = result.response;
       await cancelBody(result.response);
 
-      // Do not download or store file contents.
       if (status === 200) {
         findings.push(
           finding(
@@ -316,7 +435,7 @@ async function probeSensitiveFiles(baseUrl) {
         );
       }
     } catch {
-      // A failed probe is not proof of an exposed file.
+      // Un échec de vérification ne prouve pas qu'un fichier est exposé.
     }
   }
 
@@ -335,7 +454,7 @@ async function discoverSitemap(baseUrl) {
 
       if (
         result.response?.status === 200 &&
-        isHtml(result.response) === false &&
+        !isHtml(result.response) &&
         (result.response.headers.get("content-type") || "")
           .toLowerCase()
           .includes("xml")
@@ -344,25 +463,28 @@ async function discoverSitemap(baseUrl) {
         const $ = cheerio.load(text, { xmlMode: true });
         const urls = [];
 
-        $("url > loc, sitemap > loc").each((_, el) => {
-          const value = $(el).text().trim();
+        $("url > loc, sitemap > loc").each((_, element) => {
+          const value = $(element).text().trim();
 
           try {
             const parsed = new URL(value);
+
             if (parsed.origin === new URL(baseUrl).origin) {
               urls.push(normalizeUrl(parsed.href));
             }
           } catch {
-            // Ignore invalid sitemap entries.
+            // Ignore les entrées invalides du sitemap.
           }
         });
 
-        return urls;
+        return [...new Set(urls)];
       }
 
-      if (result.response) await cancelBody(result.response);
+      if (result.response) {
+        await cancelBody(result.response);
+      }
     } catch {
-      // A sitemap is optional.
+      // Le sitemap est facultatif.
     }
   }
 
@@ -389,7 +511,28 @@ export async function scanWebsiteIntegrity(website, config) {
     const base = await validatePublicUrl(website.url);
     const baseUrl = base.href;
     const rootOrigin = base.origin;
+
+    // Les langues sont configurées par site, sans valeur par défaut
+    // implicite dans le code.
+    const localePrefixes = new Set(
+      (Array.isArray(config.locale_prefixes) ? config.locale_prefixes : [])
+        .filter((locale) => typeof locale === "string")
+        .map((locale) => locale.trim().toLowerCase())
+        .filter(Boolean),
+    );
+
+    const defaultLocale =
+      typeof config.default_locale === "string"
+        ? config.default_locale.trim().toLowerCase()
+        : "";
+
+    // Évite d'appliquer une langue par défaut non autorisée.
+    const validDefaultLocale = localePrefixes.has(defaultLocale)
+      ? defaultLocale
+      : "";
+
     const maxPages = Math.min(Math.max(config.max_pages || 50, 1), 50);
+
     const maxLinks = Math.max(config.max_links_per_page || 50, 1);
 
     const queue = [];
@@ -409,7 +552,7 @@ export async function scanWebsiteIntegrity(website, config) {
         queued.add(normalized);
         queue.push(normalized);
       } catch {
-        // Ignore malformed URLs.
+        // Ignore les URL mal formées.
       }
     };
 
@@ -417,18 +560,21 @@ export async function scanWebsiteIntegrity(website, config) {
       try {
         enqueue(new URL(path, baseUrl).href);
       } catch {
-        // Ignore invalid configured paths.
+        // Ignore les chemins configurés invalides.
       }
     }
 
     enqueue(baseUrl);
 
-    // Sitemap discovery is optional; it does not replace internal crawling.
     const sitemapUrls = await discoverSitemap(baseUrl);
-    for (const url of sitemapUrls) enqueue(url);
+
+    for (const url of sitemapUrls) {
+      enqueue(url);
+    }
 
     while (queue.length > 0 && pagesChecked < maxPages) {
       const url = queue.shift();
+
       if (!url || visited.has(url)) continue;
 
       visited.add(url);
@@ -436,7 +582,12 @@ export async function scanWebsiteIntegrity(website, config) {
       let page;
 
       try {
-        page = await checkPage(url, rootOrigin);
+        page = await checkPage(
+          url,
+          rootOrigin,
+          localePrefixes,
+          validDefaultLocale,
+        );
       } catch (error) {
         page = {
           url,
@@ -457,13 +608,15 @@ export async function scanWebsiteIntegrity(website, config) {
 
       for (const link of (page.links || []).slice(0, maxLinks)) {
         if (linksChecked >= MAX_TOTAL_LINK_CHECKS) break;
+
         linksChecked++;
 
-        if (!visited.has(link)) enqueue(link);
+        if (!visited.has(link)) {
+          enqueue(link);
+        }
       }
     }
 
-    // Test common sensitive-file paths without saving response bodies.
     allFindings.push(...(await probeSensitiveFiles(baseUrl)));
 
     if (allFindings.length > 0) {
