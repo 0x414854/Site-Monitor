@@ -122,6 +122,28 @@ function isExpectedLocaleRedirect(
   }
 }
 
+function isCanonicalHostRedirect(from, to) {
+  try {
+    const source = new URL(from);
+    const destination = new URL(to);
+
+    if (source.protocol !== destination.protocol) {
+      return false;
+    }
+
+    const sourceHost = source.hostname.toLowerCase();
+    const destinationHost = destination.hostname.toLowerCase();
+
+    // Autorise uniquement la variante www du même domaine.
+    return (
+      destinationHost === `www.${sourceHost}` ||
+      sourceHost === `www.${destinationHost}`
+    );
+  } catch {
+    return false;
+  }
+}
+
 function isHtml(response) {
   return (response.headers.get("content-type") || "")
     .toLowerCase()
@@ -314,14 +336,21 @@ async function checkPage(url, rootOrigin, localePrefixes, defaultLocale) {
 
   // Enregistrer les redirections anormales seulement.
   for (const redirect of result.redirects) {
-    const expected = isExpectedLocaleRedirect(
+    const expectedLocale = isExpectedLocaleRedirect(
       redirect,
       rootOrigin,
       localePrefixes,
       defaultLocale,
     );
 
-    if (expected) continue;
+    const expectedCanonicalHost = isCanonicalHostRedirect(
+      redirect.from,
+      redirect.to,
+    );
+
+    if (expectedLocale || expectedCanonicalHost) {
+      continue;
+    }
 
     findings.push(
       finding(
@@ -333,6 +362,7 @@ async function checkPage(url, rootOrigin, localePrefixes, defaultLocale) {
         {
           destination: redirect.to,
           expected_locale_redirect: false,
+          expected_canonical_host_redirect: false,
         },
       ),
     );
