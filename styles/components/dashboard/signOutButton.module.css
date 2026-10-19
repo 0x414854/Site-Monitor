@@ -1,0 +1,32 @@
+.form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.email {
+  color: #74716c;
+  font-size: 12px;
+}
+
+.button {
+  padding: 9px 12px;
+  border: 1px solid #e3ded8;
+  border-radius: 9px;
+  background: #fff;
+  color: #34312d;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: #faf8f5;
+}
+
+@media (max-width: 700px) {
+  .email {
+    display: none;
+  }
+}

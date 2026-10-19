@@ -12,8 +12,8 @@ export default function Home() {
           </span>
         </Link>
 
-        <Link href="/dashboard" className={styles.navLink}>
-          Dashboard <span aria-hidden="true">↗</span>
+        <Link href="/login" className={styles.navLink}>
+          Se connecter <span aria-hidden="true">↗</span>
         </Link>
       </nav>
 
@@ -38,8 +38,8 @@ export default function Home() {
         </p>
 
         <div className={styles.actions}>
-          <Link href="/dashboard" className={styles.primaryButton}>
-            Accéder au dashboard
+          <Link href="/login" className={styles.primaryButton}>
+            Se connecter ou créer un compte
             <span aria-hidden="true">→</span>
           </Link>
         </div>

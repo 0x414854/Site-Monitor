@@ -1,11 +1,14 @@
-import { supabaseAdmin } from "@/utils/supabase/clients";
+import { redirect } from "next/navigation";
+import { createClient } from "@/utils/supabase/server";
 import DashboardCharts from "../components/dashboard/dashboardChart";
 import styles from "@/styles/page/dashboard.module.css";
 import WebsiteManager from "../components/dashboard/websiteManager";
 import IncidentHistory from "../components/dashboard/incidentHistory";
 import SslStatus from "../components/dashboard/sslStatus";
+import DnsDomainStatus from "../components/dashboard/dnsDomainStatus";
 import SecurityHeadersStatus from "../components/dashboard/securityHeaderStatus";
 import IntegrityStatus from "../components/dashboard/integrityStatus";
+import SignOutButton from "../components/dashboard/signOutButton";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +107,17 @@ function buildDailyStats(checks) {
 }
 
 export default async function DashboardPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    if (authError) console.error("Vérification de session :", authError.message);
+    redirect("/login");
+  }
+
   const now = Date.now();
   const since = new Date(now - PERIOD_DAYS * DAY_MS).toISOString();
 
@@ -116,28 +130,31 @@ export default async function DashboardPage() {
     { data: recentChecks, error: recentChecksError },
     { data: incidents, error: incidentsError },
     { data: sslChecks, error: sslChecksError },
+    { data: dnsChecks, error: dnsChecksError },
     { data: securityChecks, error: securityChecksError },
     { data: integrityScans, error: integrityScansError },
   ] = await Promise.all([
-    supabaseAdmin
+    supabase
       .from("websites")
-      .select("*")
+      .select(
+        "id, client_name, url, slug, notification_email, status, active, created_at, consecutive_failures, last_checked_at",
+      )
       .order("created_at", { ascending: false }),
 
-    supabaseAdmin
+    supabase
       .from("website_checks")
       .select("status, response_ms, status_code, checked_at, website_id")
       .gte("checked_at", since)
       .order("checked_at", { ascending: true })
       .limit(10000),
 
-    supabaseAdmin
+    supabase
       .from("website_checks")
       .select("*, websites(client_name, url)")
       .order("checked_at", { ascending: false })
       .limit(10),
 
-    supabaseAdmin
+    supabase
       .from("website_incidents")
       .select(
         `
@@ -153,13 +170,21 @@ export default async function DashboardPage() {
       .order("started_at", { ascending: false })
       .limit(20),
 
-    supabaseAdmin
+    supabase
       .from("website_ssl_checks")
       .select("*, websites(client_name, url)")
       .order("checked_at", { ascending: false })
       .limit(50),
 
-    supabaseAdmin
+    supabase
+      .from("website_dns_checks")
+      .select(
+        "id, website_id, checked_at, dns_status, dns_records, dns_changes, dns_error, rdap_status, rdap_error, domain_expires_at, domain_alert_level, websites(client_name, url)",
+      )
+      .order("checked_at", { ascending: false })
+      .limit(500),
+
+    supabase
       .from("website_security_checks")
       .select(
         `
@@ -183,7 +208,7 @@ export default async function DashboardPage() {
       )
       .order("checked_at", { ascending: false }),
 
-    supabaseAdmin
+    supabase
       .from("website_integrity_scans")
       .select(
         `
@@ -210,7 +235,7 @@ export default async function DashboardPage() {
   let integrityFindingsError = null;
 
   if (scanIds.length > 0) {
-    const result = await supabaseAdmin
+    const result = await supabase
       .from("website_integrity_findings")
       .select(
         `
@@ -239,6 +264,7 @@ export default async function DashboardPage() {
     recentChecksError ||
     incidentsError ||
     sslChecksError ||
+    dnsChecksError ||
     securityChecksError ||
     integrityScansError;
 
@@ -250,8 +276,11 @@ export default async function DashboardPage() {
         <section className={styles.errorCard}>
           <h1>Impossible de charger le dashboard</h1>
           <p>
-            Vérifie la connexion Supabase, les noms des colonnes et les
-            permissions du compte serveur.
+            Vérifie la connexion Supabase, les migrations et les permissions de
+            la base de données.
+          </p>
+          <p>
+            Détail technique : {error.message}
           </p>
         </section>
       </main>
@@ -349,6 +378,7 @@ export default async function DashboardPage() {
           <div className={styles.headerMeta}>
             <span className={styles.liveDot} />
             <span>Données Supabase</span>
+            <SignOutButton email={user.email} />
           </div>
         </header>
 
@@ -434,12 +464,13 @@ export default async function DashboardPage() {
         <WebsiteManager websites={siteList} />
         <IncidentHistory incidents={incidentList} />
         <SslStatus checks={sslChecks ?? []} />
+        <DnsDomainStatus checks={dnsChecks ?? []} />
         <SecurityHeadersStatus checks={securityChecks} />
-        <IntegrityStatus
+        {/* <IntegrityStatus
           websites={siteList}
           scans={scanList}
           findings={integrityFindings}
-        />
+        /> */}
 
         <section className={styles.chartSection}>
           <div className={styles.sectionHeading}>

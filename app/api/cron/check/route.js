@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/utils/supabase/clients";
 import { validatePublicUrl } from "@/utils/monitor/validate-url";
 import { checkSsl } from "@/utils/monitor/check-ssl";
 import { checkSecurityHeaders } from "@/utils/monitor/checkSecurityHeaders";
+import { checkDnsAndDomain } from "@/utils/monitor/checkDnsDomain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -201,6 +202,19 @@ async function sendSslExpirationAlert(site, sslResult) {
 
 async function checkWebsite(site) {
   const startedAt = Date.now();
+  const dnsDomainPromise = checkDnsAndDomain(site).catch((error) => {
+    console.error(
+      `[DNS] Échec du contrôle pour ${site.url} :`,
+      error instanceof Error ? error.message : "Erreur inconnue",
+    );
+
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Échec de l'enregistrement du contrôle DNS.",
+    };
+  });
 
   let statusCode = null;
   let errorMessage = null;
@@ -235,7 +249,6 @@ async function checkWebsite(site) {
         securityHeaders = response.headers;
         securityIsHttps = url.protocol === "https:";
 
-        // Conserver le contrôle HTTP existant.
         isUp = statusCode < 500;
 
         if (!isUp) {
@@ -281,7 +294,16 @@ async function checkWebsite(site) {
   });
 
   if (error) {
-    throw new Error(`Échec de l'enregistrement Supabase : ${error.message}`);
+    const dnsDomain = await dnsDomainPromise;
+
+    return {
+      site: site.url,
+      status: "unknown",
+      httpStatus: statusCode,
+      responseMs,
+      error: `Échec de l'enregistrement du contrôle HTTP : ${error.message}`,
+      dnsDomain,
+    };
   }
 
   try {
@@ -367,6 +389,7 @@ async function checkWebsite(site) {
     sslAlert,
     securitySaved,
     securityScore: securityResult?.security_score ?? null,
+    dnsDomain: await dnsDomainPromise,
   };
 }
 
@@ -500,7 +523,10 @@ export async function GET(request) {
 
           return {
             site: site.url,
-            error: "Échec du contrôle ou de l'enregistrement",
+            error:
+              error instanceof Error
+                ? error.message
+                : "Échec du contrôle ou de l'enregistrement",
           };
         }
       }),

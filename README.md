@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Site Monitor
 
-## Getting Started
+Application Next.js pour surveiller la disponibilité, les certificats TLS, les
+en-têtes de sécurité et l'intégrité de sites web. Les contrôles HTTP et
+d'intégrité sont planifiés une fois par jour à 08:00 UTC.
 
-First, run the development server:
+## Démarrage
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. Installer les dépendances avec `npm install`.
+2. Configurer les variables suivantes dans `.env.local` :
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` (ou l'ancienne clé publique
+     `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
+   - `SUPABASE_SERVICE_ROLE_KEY` (serveur uniquement, utilisée par les tâches cron)
+   - `CRON_SECRET`
+   - `RESEND_API_KEY` et `ALERT_FROM_EMAIL` pour les notifications e-mail
+3. Exécuter la migration
+   [`20261019000000_user_auth_and_website_isolation.sql`](./supabase/migrations/20261019000000_user_auth_and_website_isolation.sql)
+   sur le projet Supabase.
+4. Exécuter la migration de permissions
+   [`20261019000001_grant_authenticated_dashboard_access.sql`](./supabase/migrations/20261019000001_grant_authenticated_dashboard_access.sql).
+5. Exécuter la migration DNS et expiration de domaine
+   [`20261019000004_add_dns_and_domain_checks.sql`](./supabase/migrations/20261019000004_add_dns_and_domain_checks.sql).
+   Elle retire également les colonnes de règle HTTP abandonnées.
+6. Démarrer l'application avec `npm run dev`.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Authentification Supabase
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+Les utilisateurs peuvent créer un compte par e-mail et mot de passe, ou se
+connecter avec Google ou GitHub. Dans Supabase, active les fournisseurs Google
+et GitHub souhaités, configure leurs identifiants OAuth et ajoute les URL de
+redirection suivantes dans la configuration Auth :
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Développement : `http://localhost:3000/auth/callback`
+- Production : `https://<ton-domaine>/auth/callback`
 
-## Learn More
+Configure aussi l'URL du site et les modèles e-mail de confirmation et de
+réinitialisation de mot de passe. Pour une utilisation en production, configure
+un fournisseur SMTP fiable pour Supabase Auth.
 
-To learn more about Next.js, take a look at the following resources:
+## Isolation des données
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+La migration ajoute `owner_id` aux sites et active les politiques RLS sur les
+sites, contrôles, incidents, vérifications SSL, audits de sécurité et données
+d'intégrité. Les pages et actions de l'application utilisent la session de
+l'utilisateur; seul le code serveur des tâches planifiées utilise la clé
+`SUPABASE_SERVICE_ROLE_KEY`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Au déploiement de la migration, les sites historiques sont attribués au compte
+authentifié le plus ancien s'il en existe un. Sinon, le premier compte créé les
+récupère automatiquement. Crée donc ton compte avant d'ouvrir l'application aux
+inscriptions publiques afin de conserver la propriété des données existantes.
 
-## Deploy on Vercel
+## Tâches planifiées
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+`vercel.json` planifie les contrôles de disponibilité et d'intégrité chaque
+jour à 08:00 UTC. Les routes `/api/cron/check` et `/api/cron/integrity`
+requièrent le secret `CRON_SECRET`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Surveillance DNS et expiration de domaine
+
+Les enregistrements A, AAAA, CNAME, MX, NS et TXT sont comparés au contrôle
+précédent afin de signaler les changements et les échecs de résolution. La date
+d'expiration du domaine est consultée via RDAP lorsqu'elle est fournie par le
+registre. Certains domaines ne publient pas cette information.

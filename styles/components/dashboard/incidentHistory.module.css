@@ -1,10 +1,26 @@
 .section {
+  --incident-bg: #0b1120;
+  --incident-surface: #111a2b;
+  --incident-surface-hover: #162238;
+  --incident-border: rgba(148, 163, 184, 0.14);
+  --incident-text: #e5edf8;
+  --incident-muted: #8796ad;
+  --incident-accent: #7c9cff;
+
   margin-top: 2rem;
   padding: 1.5rem;
-  border: 1px solid var(--border-color, #e5e7eb);
+  border: 1px solid var(--incident-border);
   border-radius: 16px;
-  background: var(--card-background, #fff);
+  background:
+    radial-gradient(
+      ellipse at 100% 0%,
+      rgba(59, 130, 246, 0.045),
+      transparent 45%
+    ),
+    var(--incident-surface);
   min-width: 0;
+  color: var(--incident-text);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 .heading {
@@ -18,45 +34,60 @@
 .eyebrow {
   display: block;
   margin-bottom: 0.4rem;
-  color: #64748b;
+  color: var(--incident-accent);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .heading h2 {
   margin: 0;
+  color: var(--incident-text);
   font-size: 1.25rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
 }
 
 .count {
   flex-shrink: 0;
   padding: 0.4rem 0.7rem;
+  border: 1px solid rgba(124, 156, 255, 0.18);
   border-radius: 999px;
-  background: #f1f5f9;
-  color: #475569;
+  background: rgba(124, 156, 255, 0.09);
+  color: #a9c0ff;
   font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .empty {
   padding: 2rem 1rem;
   text-align: center;
-  color: #64748b;
+  color: var(--incident-muted);
 }
 
 .empty h3 {
   margin: 0 0 0.5rem;
-  color: #334155;
+  color: var(--incident-text);
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .empty p {
   margin: 0;
+  color: var(--incident-muted);
   font-size: 0.9rem;
+  line-height: 1.6;
 }
 
 .tableWrapper {
   width: 100%;
   overflow-x: auto;
+  border: 1px solid var(--incident-border);
+  border-radius: 12px;
+  background: rgba(7, 13, 25, 0.22);
+  scrollbar-width: thin;
+  scrollbar-color: #33445f transparent;
 }
 
 .table {
@@ -68,17 +99,30 @@
 
 .table th {
   padding: 0.85rem 1rem;
-  border-bottom: 1px solid #e5e7eb;
-  color: #64748b;
-  font-size: 0.75rem;
-  font-weight: 600;
+  border-bottom: 1px solid var(--incident-border);
+  background: rgba(148, 163, 184, 0.035);
+  color: var(--incident-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
 .table td {
   padding: 1rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.09);
+  color: #cbd6e8;
   vertical-align: top;
+  line-height: 1.55;
+}
+
+.table tbody tr {
+  transition: background 160ms ease;
+}
+
+.table tbody tr:hover {
+  background: var(--incident-surface-hover);
 }
 
 .table tbody tr:last-child td {
@@ -93,52 +137,72 @@
 }
 
 .site strong {
-  color: #0f172a;
+  color: var(--incident-text);
+  font-weight: 600;
 }
 
 .site span {
   max-width: 220px;
   overflow-wrap: anywhere;
-  color: #64748b;
+  color: var(--incident-muted);
   font-size: 0.78rem;
 }
 
 .badge {
-  display: inline-block;
-  padding: 0.35rem 0.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid transparent;
   border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.73rem;
+  font-weight: 650;
   white-space: nowrap;
 }
 
 .open {
-  background: #fee2e2;
-  color: #b91c1c;
+  border-color: rgba(255, 146, 157, 0.2);
+  background: rgba(255, 107, 122, 0.1);
+  color: #ff929d;
 }
 
 .resolved {
-  background: #dcfce7;
-  color: #166534;
+  border-color: rgba(114, 230, 176, 0.18);
+  background: rgba(52, 211, 153, 0.09);
+  color: #72e6b0;
 }
 
 .error {
   min-width: 150px;
   max-width: 280px;
-  color: #64748b;
+  color: var(--incident-muted);
   overflow-wrap: anywhere;
+  line-height: 1.55;
 }
 
 @media (max-width: 640px) {
   .section {
+    margin-top: 1.5rem;
     padding: 1rem;
+    border-radius: 14px;
   }
 
   .heading {
     align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .heading h2 {
+    font-size: 1.1rem;
   }
 
   .table {
     min-width: 850px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .table tbody tr {
+    transition: none;
   }
 }
