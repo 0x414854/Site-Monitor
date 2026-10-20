@@ -454,6 +454,96 @@
   overflow-wrap: anywhere;
 }
 
+.sectionNav {
+  position: sticky;
+  z-index: 5;
+  top: 12px;
+  display: flex;
+  gap: 8px;
+  margin: 22px 0 4px;
+  padding: 9px;
+  overflow-x: auto;
+  border: 1px solid var(--dash-border);
+  border-radius: 14px;
+  background: rgba(17, 26, 43, 0.92);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(14px);
+  scrollbar-width: thin;
+  scrollbar-color: #34435c transparent;
+}
+
+.sectionNav a {
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: #aab7cb;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.sectionNav a:hover,
+.sectionNav a:focus-visible {
+  border-color: rgba(96, 145, 255, 0.2);
+  outline: none;
+  background: rgba(96, 145, 255, 0.09);
+  color: #c4d7ff;
+}
+
+.anchorSection,
+.categorySection,
+.chartSection,
+.tableSection {
+  scroll-margin-top: 88px;
+}
+
+.categorySection {
+  margin-top: 32px;
+}
+
+.categoryHeading {
+  padding: 0 2px;
+}
+
+.categoryHeading .eyebrow {
+  margin-bottom: 7px;
+}
+
+.categoryHeading h2 {
+  margin: 0;
+  color: #f3f7ff;
+  font-size: 23px;
+  font-weight: 720;
+  letter-spacing: -0.035em;
+}
+
+.categoryHeading p {
+  margin: 7px 0 0;
+  color: var(--dash-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.responseChange {
+  margin: 0.35rem 0 0;
+  color: var(--dash-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.responseSlower {
+  color: #ff929d;
+}
+
+.responseFaster {
+  color: #72e6b0;
+}
+
 @media (max-width: 1000px) {
   .statsGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -509,6 +599,17 @@
     padding: 18px;
   }
 
+  .sectionNav {
+    top: 8px;
+    margin-top: 16px;
+    padding: 7px;
+  }
+
+  .sectionNav a {
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+
   .secondaryStats strong {
     font-size: 17px;
   }
@@ -538,11 +639,20 @@
     flex-direction: column;
     line-height: 1.6;
   }
+
+  .categorySection {
+    margin-top: 24px;
+  }
+
+  .categoryHeading h2 {
+    font-size: 20px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .statCard,
-  .table tbody tr {
+  .table tbody tr,
+  .sectionNav a {
     transition: none;
   }
 

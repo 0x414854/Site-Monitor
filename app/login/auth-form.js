@@ -115,26 +115,41 @@ export default function AuthForm({ initialError }) {
 
   return (
     <main className={styles.page}>
-      <section className={styles.card}>
-        <Link href="/" className={styles.brand}>
-          SITE<span>MONITOR</span>
-        </Link>
+      <div className={styles.backgroundGlow} aria-hidden="true" />
 
-        <span className={styles.eyebrow}>ESPACE DE SURVEILLANCE</span>
-        <h1>
-          {isReset
-            ? "Réinitialiser le mot de passe"
-            : isSignup
-              ? "Créer un compte"
-              : "Bon retour"}
-        </h1>
-        <p className={styles.description}>
-          {isReset
-            ? "Nous t’enverrons un lien sécurisé par e-mail."
-            : isSignup
-              ? "Crée un compte pour commencer à surveiller tes sites."
-              : "Connecte-toi pour accéder à ton dashboard."}
-        </p>
+      <section className={styles.card} aria-labelledby="auth-title">
+        <header className={styles.header}>
+          <Link
+            href="/"
+            className={styles.brand}
+            aria-label="SiteMonitor, accueil"
+          >
+            <span className={styles.brandMark} aria-hidden="true">
+              S
+            </span>
+            <span className={styles.brandName}>
+              SITE<span>MONITOR</span>
+            </span>
+          </Link>
+
+          <span className={styles.eyebrow}>ESPACE DE SURVEILLANCE</span>
+
+          <h1 id="auth-title" className={styles.title}>
+            {isReset
+              ? "Réinitialiser le mot de passe"
+              : isSignup
+                ? "Créer un compte"
+                : "Bon retour"}
+          </h1>
+
+          <p className={styles.description}>
+            {isReset
+              ? "Nous t’enverrons un lien sécurisé par e-mail."
+              : isSignup
+                ? "Crée un compte pour commencer à surveiller tes sites."
+                : "Connecte-toi pour accéder à ton dashboard."}
+          </p>
+        </header>
 
         {!isReset && (
           <div className={styles.providers}>
@@ -144,44 +159,82 @@ export default function AuthForm({ initialError }) {
               onClick={() => handleOAuth("google")}
               disabled={pending}
             >
-              Continuer avec Google
+              <span className={styles.providerIcon} aria-hidden="true">
+                G
+              </span>
+              <span>Continuer avec Google</span>
             </button>
+
             <button
               className={styles.secondaryButton}
               type="button"
               onClick={() => handleOAuth("github")}
               disabled={pending}
             >
-              Continuer avec GitHub
+              <svg
+                className={styles.githubIcon}
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.56.1.76-.24.76-.54v-2.1c-3.1.67-3.76-1.32-3.76-1.32-.5-1.29-1.23-1.63-1.23-1.63-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15 1 1.7 2.62 1.21 3.26.92.1-.72.39-1.21.71-1.49-2.48-.28-5.09-1.24-5.09-5.53 0-1.22.44-2.21 1.15-2.99-.12-.28-.5-1.42.11-2.95 0 0 .94-.3 3.05 1.14a10.6 10.6 0 0 1 5.55 0c2.12-1.44 3.05-1.14 3.05-1.14.61 1.53.23 2.67.12 2.95.71.78 1.14 1.77 1.14 2.99 0 4.3-2.62 5.25-5.11 5.52.4.35.75 1.02.75 2.06v3.1c0 .3.2.65.77.54A11.1 11.1 0 0 0 12 .9Z" />
+              </svg>
+              <span>Continuer avec GitHub</span>
             </button>
           </div>
         )}
 
-        {!isReset && <div className={styles.divider}>ou par e-mail</div>}
+        {!isReset && (
+          <div className={styles.divider}>
+            <span>ou continuer avec ton e-mail</span>
+          </div>
+        )}
 
         <form className={styles.form} onSubmit={handleSubmit}>
-          <label htmlFor="email">Adresse e-mail</label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            maxLength={254}
-            required
-          />
+          <div className={styles.field}>
+            <label htmlFor="email">Adresse e-mail</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              maxLength={254}
+              placeholder="nom@exemple.fr"
+              required
+            />
+          </div>
 
           {!isReset && (
-            <>
-              <label htmlFor="password">Mot de passe</label>
+            <div className={styles.field}>
+              <div className={styles.labelRow}>
+                <label htmlFor="password">Mot de passe</label>
+
+                {mode === "login" && (
+                  <button
+                    type="button"
+                    className={styles.inlineLink}
+                    onClick={() => {
+                      setMode("reset");
+                      setMessage("");
+                    }}
+                  >
+                    Oublié ?
+                  </button>
+                )}
+              </div>
+
               <input
                 id="password"
                 name="password"
                 type="password"
                 autoComplete={isSignup ? "new-password" : "current-password"}
                 minLength={8}
+                placeholder={
+                  isSignup ? "8 caractères minimum" : "Ton mot de passe"
+                }
                 required
               />
-            </>
+            </div>
           )}
 
           {message && (
@@ -189,7 +242,10 @@ export default function AuthForm({ initialError }) {
               className={success ? styles.success : styles.error}
               role={success ? "status" : "alert"}
             >
-              {message}
+              <span className={styles.messageIcon} aria-hidden="true">
+                {success ? "✓" : "!"}
+              </span>
+              <span>{message}</span>
             </p>
           )}
 
@@ -198,30 +254,24 @@ export default function AuthForm({ initialError }) {
             type="submit"
             disabled={pending}
           >
-            {pending
-              ? "Patiente…"
-              : isReset
-                ? "Envoyer le lien"
-                : isSignup
-                  ? "Créer mon compte"
-                  : "Se connecter"}
+            <span>
+              {pending
+                ? "Patiente…"
+                : isReset
+                  ? "Envoyer le lien"
+                  : isSignup
+                    ? "Créer mon compte"
+                    : "Se connecter"}
+            </span>
+            {!pending && (
+              <span className={styles.buttonArrow} aria-hidden="true">
+                →
+              </span>
+            )}
           </button>
         </form>
 
-        {mode === "login" && (
-          <button
-            type="button"
-            className={styles.textButton}
-            onClick={() => {
-              setMode("reset");
-              setMessage("");
-            }}
-          >
-            Mot de passe oublié ?
-          </button>
-        )}
-
-        <p className={styles.switchMode}>
+        <footer className={styles.footer}>
           {isReset ? (
             <button
               type="button"
@@ -231,11 +281,11 @@ export default function AuthForm({ initialError }) {
                 setMessage("");
               }}
             >
-              Retour à la connexion
+              ← Retour à la connexion
             </button>
           ) : (
-            <>
-              {isSignup ? "Déjà un compte ?" : "Pas encore de compte ?"}{" "}
+            <p className={styles.switchMode}>
+              {isSignup ? "Déjà un compte ?" : "Pas encore de compte ?"}
               <button
                 type="button"
                 className={styles.textButton}
@@ -246,9 +296,23 @@ export default function AuthForm({ initialError }) {
               >
                 {isSignup ? "Se connecter" : "Créer un compte"}
               </button>
-            </>
+            </p>
           )}
-        </p>
+
+          <p className={styles.securityNote}>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              aria-hidden="true"
+            >
+              <rect x="5" y="10" width="14" height="11" rx="2" />
+              <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+            </svg>
+            Connexion sécurisée
+          </p>
+        </footer>
       </section>
     </main>
   );

@@ -129,6 +129,7 @@ export default async function DashboardPage() {
     { data: checks, error: checksError },
     { data: recentChecks, error: recentChecksError },
     { data: incidents, error: incidentsError },
+    { count: openIncidentsCount, error: openIncidentsError },
     { data: sslChecks, error: sslChecksError },
     { data: dnsChecks, error: dnsChecksError },
     { data: securityChecks, error: securityChecksError },
@@ -169,6 +170,11 @@ export default async function DashboardPage() {
       )
       .order("started_at", { ascending: false })
       .limit(20),
+
+    supabase
+      .from("website_incidents")
+      .select("id", { count: "exact", head: true })
+      .is("resolved_at", null),
 
     supabase
       .from("website_ssl_checks")
@@ -263,10 +269,12 @@ export default async function DashboardPage() {
     checksError ||
     recentChecksError ||
     incidentsError ||
+    openIncidentsError ||
     sslChecksError ||
     dnsChecksError ||
     securityChecksError ||
-    integrityScansError;
+    integrityScansError ||
+    integrityFindingsError;
 
   if (error) {
     console.error("Erreur dashboard Supabase :", error.message);
@@ -288,13 +296,15 @@ export default async function DashboardPage() {
   }
 
   const siteList = websites ?? [];
+  const activeSites = siteList.filter((site) => site.active);
   const checkList = checks ?? [];
   const latestChecks = recentChecks ?? [];
   const incidentList = incidents ?? [];
+  const openIncidentCount = openIncidentsCount ?? 0;
 
-  const onlineCount = siteList.filter((site) => isUp(site.status)).length;
+  const onlineCount = activeSites.filter((site) => isUp(site.status)).length;
 
-  const downCount = siteList.filter(
+  const downCount = activeSites.filter(
     (site) => normalizeStatus(site.status) === "down",
   ).length;
 
@@ -343,13 +353,6 @@ export default async function DashboardPage() {
         100
       : null;
 
-  const responseChangeColor =
-    responseTimeChange === null || responseTimeChange === 0
-      ? "inherit"
-      : responseTimeChange > 0
-        ? "#dc2626"
-        : "#16a34a";
-
   const responseChangeLabel =
     responseTimeChange === null
       ? "Comparaison indisponible"
@@ -368,16 +371,16 @@ export default async function DashboardPage() {
       <div className={styles.container}>
         <header className={styles.header}>
           <div>
-            <span className={styles.eyebrow}>SITE MONITOR / OVERVIEW</span>
-            <h1>Dashboard</h1>
+            <span className={styles.eyebrow}>SITE MONITOR / VUE D’ENSEMBLE</span>
+            <h1>Vue d’ensemble</h1>
             <p className={styles.subtitle}>
-              Surveille l’état de tes sites et leurs performances.
+              L’état de tes sites et les points à surveiller, en un coup d’œil.
             </p>
           </div>
 
           <div className={styles.headerMeta}>
             <span className={styles.liveDot} />
-            <span>Données Supabase</span>
+            <span>Prochain contrôle · 08:00 UTC</span>
             <SignOutButton email={user.email} />
           </div>
         </header>
@@ -385,11 +388,14 @@ export default async function DashboardPage() {
         <section className={styles.statsGrid} aria-label="Statistiques">
           <article className={styles.statCard}>
             <div className={styles.statTop}>
-              <span>Sites surveillés</span>
+              <span>Surveillance active</span>
               <span className={styles.statIcon}>◈</span>
             </div>
-            <strong className={styles.statValue}>{siteList.length}</strong>
-            <span className={styles.statCaption}>Sites enregistrés</span>
+            <strong className={styles.statValue}>{activeSites.length}</strong>
+            <span className={styles.statCaption}>
+              {siteList.length} site{siteList.length > 1 ? "s" : ""} enregistré
+              {siteList.length > 1 ? "s" : ""}
+            </span>
           </article>
 
           <article className={styles.statCard}>
@@ -403,12 +409,12 @@ export default async function DashboardPage() {
 
           <article className={styles.statCard}>
             <div className={styles.statTop}>
-              <span>Sites en panne</span>
+              <span>Incidents en cours</span>
               <span className={`${styles.statusDot} ${styles.red}`} />
             </div>
-            <strong className={styles.statValue}>{downCount}</strong>
+            <strong className={styles.statValue}>{openIncidentCount}</strong>
             <span className={styles.statCaption}>
-              Nécessitent une vérification
+              {downCount} site{downCount > 1 ? "s" : ""} actuellement en panne
             </span>
           </article>
 
@@ -439,11 +445,13 @@ export default async function DashboardPage() {
                   )} ms`}
             </strong>
             <p
-              style={{
-                color: responseChangeColor,
-                fontSize: "0.85rem",
-                marginTop: "0.35rem",
-              }}
+              className={`${styles.responseChange} ${
+                responseTimeChange === null || responseTimeChange === 0
+                  ? ""
+                  : responseTimeChange > 0
+                    ? styles.responseSlower
+                    : styles.responseFaster
+              }`}
             >
               {responseChangeLabel}
             </p>
@@ -461,18 +469,58 @@ export default async function DashboardPage() {
             </strong>
           </div>
         </section>
-        <WebsiteManager websites={siteList} />
-        <IncidentHistory incidents={incidentList} />
-        <SslStatus checks={sslChecks ?? []} />
-        <DnsDomainStatus checks={dnsChecks ?? []} />
-        <SecurityHeadersStatus checks={securityChecks} />
-        {/* <IntegrityStatus
-          websites={siteList}
-          scans={scanList}
-          findings={integrityFindings}
-        /> */}
 
-        <section className={styles.chartSection}>
+        <nav className={styles.sectionNav} aria-label="Sections du dashboard">
+          <a href="#websites">Sites</a>
+          <a href="#alerts">Incidents</a>
+          <a href="#security">Sécurité</a>
+          <a href="#dns">DNS & domaine</a>
+          <a href="#integrity">Intégrité</a>
+          <a href="#performance">Performance</a>
+          <a href="#activity">Activité</a>
+        </nav>
+
+        <div id="websites" className={styles.anchorSection}>
+          <WebsiteManager websites={siteList} />
+        </div>
+
+        <div id="alerts" className={styles.anchorSection}>
+          <IncidentHistory incidents={incidentList} />
+        </div>
+
+        <div id="security" className={styles.categorySection}>
+          <div className={styles.categoryHeading}>
+            <span className={styles.eyebrow}>PROTECTION</span>
+            <h2>Sécurité</h2>
+            <p>Certificats HTTPS et bonnes pratiques des en-têtes.</p>
+          </div>
+          <SslStatus checks={sslChecks ?? []} />
+          <SecurityHeadersStatus checks={securityChecks} />
+        </div>
+
+        <div id="dns" className={styles.categorySection}>
+          <div className={styles.categoryHeading}>
+            <span className={styles.eyebrow}>RÉSOLUTION & ENREGISTREMENT</span>
+            <h2>DNS & domaine</h2>
+            <p>Évolution des enregistrements et expiration connue du domaine.</p>
+          </div>
+          <DnsDomainStatus checks={dnsChecks ?? []} />
+        </div>
+
+        <div id="integrity" className={styles.categorySection}>
+          <div className={styles.categoryHeading}>
+            <span className={styles.eyebrow}>CONTENU & LIENS</span>
+            <h2>Intégrité</h2>
+            <p>Anomalies détectées lors de l’exploration des sites.</p>
+          </div>
+          <IntegrityStatus
+            websites={siteList}
+            scans={scanList}
+            findings={integrityFindings}
+          />
+        </div>
+
+        <section id="performance" className={styles.chartSection}>
           <div className={styles.sectionHeading}>
             <div>
               <span className={styles.eyebrow}>PERFORMANCE</span>
@@ -489,7 +537,7 @@ export default async function DashboardPage() {
           </p>
         </section>
 
-        <section className={styles.tableSection}>
+        <section id="activity" className={styles.tableSection}>
           <div className={styles.sectionHeading}>
             <div>
               <span className={styles.eyebrow}>ACTIVITÉ</span>

@@ -269,7 +269,15 @@ export default async function WebsiteDetailPage({ params }) {
           </article>
         </section>
 
-        <section className={styles.chartSection}>
+        <nav className={styles.sectionNav} aria-label="Sections de la fiche site">
+          <a href="#performance">Performance</a>
+          <a href="#incidents">Incidents</a>
+          <a href="#security">Sécurité</a>
+          <a href="#dns">DNS & domaine</a>
+          <a href="#activity">Historique</a>
+        </nav>
+
+        <section id="performance" className={styles.chartSection}>
           <div className={styles.sectionHeading}>
             <div>
               <span className={styles.eyebrow}>PERFORMANCE</span>
@@ -280,23 +288,40 @@ export default async function WebsiteDetailPage({ params }) {
           <DashboardCharts data={days} />
         </section>
 
-        <IncidentHistory incidents={incidents ?? []} />
-        <SslStatus checks={sslChecks ?? []} />
-        <DnsDomainStatus checks={dnsChecks ?? []} showHistory />
+        <div id="incidents" className={styles.anchorSection}>
+          <IncidentHistory incidents={incidents ?? []} />
+        </div>
 
-        <SecurityHeadersStatus
-          checks={(securityChecks ?? []).map((check) => ({
-            ...check,
-            website: {
+        <div id="security" className={styles.categorySection}>
+          <div className={styles.categoryHeading}>
+            <span className={styles.eyebrow}>PROTECTION</span>
+            <h2>Sécurité</h2>
+            <p>Certificat HTTPS et configuration des en-têtes.</p>
+          </div>
+          <SslStatus checks={sslChecks ?? []} />
+          <SecurityHeadersStatus
+            checks={(securityChecks ?? []).map((check) => ({
+              ...check,
+              website: {
+                client_name: website.client_name,
+                url: website.url,
+              },
+              website_url: website.url,
               client_name: website.client_name,
-              url: website.url,
-            },
-            website_url: website.url,
-            client_name: website.client_name,
-          }))}
-        />
+            }))}
+          />
+        </div>
 
-        <section className={styles.tableSection}>
+        <div id="dns" className={styles.categorySection}>
+          <div className={styles.categoryHeading}>
+            <span className={styles.eyebrow}>RÉSOLUTION & ENREGISTREMENT</span>
+            <h2>DNS & domaine</h2>
+            <p>Historique des enregistrements et expiration RDAP.</p>
+          </div>
+          <DnsDomainStatus checks={dnsChecks ?? []} showHistory />
+        </div>
+
+        <section id="activity" className={styles.tableSection}>
           <div className={styles.sectionHeading}>
             <div>
               <span className={styles.eyebrow}>ACTIVITÉ</span>

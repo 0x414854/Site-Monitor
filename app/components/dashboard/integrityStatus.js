@@ -75,20 +75,35 @@ export default function IntegrityStatus({ websites, scans, findings }) {
     return map;
   }, [scans]);
 
+  const latestCompletedScans = useMemo(() => {
+    const map = new Map();
+
+    for (const scan of scans) {
+      if (scan.status === "completed" && !map.has(scan.website_id)) {
+        map.set(scan.website_id, scan);
+      }
+    }
+
+    return map;
+  }, [scans]);
+
   const siteById = useMemo(
     () => new Map(websites.map((site) => [site.id, site])),
     [websites],
   );
 
-  const scanById = useMemo(
-    () => new Map(scans.map((scan) => [scan.id, scan])),
-    [scans],
+  const latestCompletedScanById = useMemo(
+    () =>
+      new Map(
+        [...latestCompletedScans.values()].map((scan) => [scan.id, scan]),
+      ),
+    [latestCompletedScans],
   );
 
   const currentFindings = useMemo(() => {
     return findings
       .map((finding) => {
-        const scan = scanById.get(finding.scan_id);
+        const scan = latestCompletedScanById.get(finding.scan_id);
 
         return {
           ...finding,
@@ -96,8 +111,8 @@ export default function IntegrityStatus({ websites, scans, findings }) {
           website: siteById.get(scan?.website_id),
         };
       })
-      .filter((finding) => finding.websiteId);
-  }, [findings, scanById, siteById]);
+        .filter((finding) => finding.websiteId);
+  }, [findings, latestCompletedScanById, siteById]);
 
   const filteredFindings = currentFindings.filter((finding) => {
     const matchesSite =
@@ -128,7 +143,8 @@ export default function IntegrityStatus({ websites, scans, findings }) {
           <span className={styles.eyebrow}>CONTRÔLE QUOTIDIEN</span>
           <h2>Intégrité des sites</h2>
           <p>
-            Pages en erreur, liens cassés, redirections et fichiers sensibles.
+            Pages en erreur, liens cassés, redirections et fichiers sensibles
+            des derniers scans terminés.
           </p>
         </div>
 
@@ -223,7 +239,10 @@ export default function IntegrityStatus({ websites, scans, findings }) {
         <div className={styles.findingsHeading}>
           <div>
             <h3>Anomalies détectées</h3>
-            <p>Résultats des scans les plus récents enregistrés.</p>
+            <p>
+              Résultats du dernier scan terminé pour chaque site ; les
+              anomalies absentes du nouveau scan ne sont plus affichées ici.
+            </p>
           </div>
 
           <span className={styles.counter}>
