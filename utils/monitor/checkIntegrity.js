@@ -58,6 +58,27 @@ function stripLocalePrefix(pathname, localePrefixes) {
   };
 }
 
+function isSameSiteOrigin(origin, rootOrigin) {
+  try {
+    const candidate = new URL(origin);
+    const root = new URL(rootOrigin);
+
+    if (
+      candidate.protocol !== root.protocol ||
+      candidate.port !== root.port
+    ) {
+      return false;
+    }
+
+    return (
+      candidate.hostname.toLowerCase() === root.hostname.toLowerCase() ||
+      isCanonicalHostRedirect(candidate.href, root.href)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Reconnaît les redirections de langue attendues.
  *
@@ -67,6 +88,7 @@ function stripLocalePrefix(pathname, localePrefixes) {
  *   est considéré comme une redirection de langue si le chemin
  *   reste identique après retrait du préfixe.
  * - Une redirection vers un autre domaine n'est jamais ignorée.
+ * - Les variantes www/non-www du domaine surveillé sont considérées comme la même origine.
  * - Une langue non configurée n'est pas considérée comme valide.
  */
 function isExpectedLocaleRedirect(
@@ -81,7 +103,10 @@ function isExpectedLocaleRedirect(
     const from = new URL(redirect.from);
     const to = new URL(redirect.to);
 
-    if (from.origin !== rootOrigin || to.origin !== rootOrigin) {
+    if (
+      !isSameSiteOrigin(from.origin, rootOrigin) ||
+      !isSameSiteOrigin(to.origin, rootOrigin)
+    ) {
       return false;
     }
 
@@ -127,7 +152,10 @@ function isCanonicalHostRedirect(from, to) {
     const source = new URL(from);
     const destination = new URL(to);
 
-    if (source.protocol !== destination.protocol) {
+    if (
+      source.protocol !== destination.protocol ||
+      source.port !== destination.port
+    ) {
       return false;
     }
 
