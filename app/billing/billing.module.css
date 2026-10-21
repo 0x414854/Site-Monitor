@@ -1,0 +1,248 @@
+.page {
+  min-height: 100vh;
+  padding: 36px 22px 60px;
+  background: #0b1120;
+  color: #e5edf8;
+}
+
+.container {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+.backLink {
+  color: #aab7cb;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.backLink:hover {
+  color: #c4d7ff;
+}
+
+.header {
+  margin: 34px 0 26px;
+}
+
+.eyebrow {
+  display: block;
+  margin-bottom: 8px;
+  color: #91b4ff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+}
+
+.header h1 {
+  margin: 0;
+  color: #f3f7ff;
+  font-size: clamp(28px, 5vw, 40px);
+  letter-spacing: -0.04em;
+}
+
+.header p,
+.sectionHeading p {
+  color: #8796ad;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.message {
+  margin: 0 0 18px;
+  padding: 13px 15px;
+  border: 1px solid rgba(124, 156, 255, 0.2);
+  border-radius: 10px;
+  background: rgba(96, 145, 255, 0.08);
+  color: #c4d7ff;
+  font-size: 13px;
+}
+
+.currentPlan,
+.planCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 16px;
+  background: #111a2b;
+}
+
+.currentPlan h2 {
+  margin: 5px 0;
+  color: #f3f7ff;
+  font-size: 23px;
+}
+
+.currentPlan p {
+  margin: 0;
+  color: #aab7cb;
+  font-size: 13px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 6px;
+  color: #8796ad;
+  font-size: 11px;
+}
+
+.usage,
+.planStatus {
+  min-width: 140px;
+}
+
+.usage strong,
+.planStatus strong {
+  display: block;
+  color: #e5edf8;
+  font-size: 15px;
+}
+
+.planStatus small {
+  display: block;
+  margin-top: 7px;
+  color: #8796ad;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.portalButton,
+.planButton {
+  display: inline-flex;
+  justify-content: center;
+  margin-top: 16px;
+  padding: 11px 15px;
+  border: 1px solid rgba(124, 156, 255, 0.24);
+  border-radius: 9px;
+  background: rgba(96, 145, 255, 0.1);
+  color: #c4d7ff;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: center;
+  text-decoration: none;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+
+.portalButton:hover,
+.planButton:hover {
+  border-color: rgba(124, 156, 255, 0.4);
+  background: rgba(96, 145, 255, 0.16);
+}
+
+.planSection {
+  margin-top: 38px;
+}
+
+.sectionHeading {
+  margin-bottom: 18px;
+}
+
+.sectionHeading h2 {
+  margin: 0;
+  color: #f3f7ff;
+  font-size: 21px;
+}
+
+.sectionHeading p {
+  margin: 7px 0 0;
+  font-size: 12px;
+}
+
+.planGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.planCard {
+  align-items: flex-start;
+  flex-direction: column;
+  min-height: 200px;
+  padding: 19px;
+}
+
+.planCardCurrent {
+  border-color: rgba(114, 230, 176, 0.3);
+  background:
+    linear-gradient(145deg, rgba(114, 230, 176, 0.045), transparent 60%),
+    #111a2b;
+}
+
+.planCard h3 {
+  margin: 0 0 12px;
+  color: #e5edf8;
+  font-size: 16px;
+}
+
+.planCard strong {
+  color: #f3f7ff;
+  font-size: 22px;
+}
+
+.planCard strong small {
+  color: #8796ad;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.planCard p {
+  color: #aab7cb;
+  font-size: 12px;
+}
+
+.planButton {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: auto;
+}
+
+.currentBadge,
+.mutedAction {
+  color: #72e6b0;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.mutedAction {
+  color: #8796ad;
+}
+
+@media (max-width: 760px) {
+  .planGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .currentPlan {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 17px;
+  }
+
+  .usage,
+  .planStatus {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .page {
+    padding: 24px 14px 40px;
+  }
+
+  .currentPlan,
+  .planCard {
+    padding: 17px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portalButton,
+  .planButton {
+    transition: none;
+  }
+}

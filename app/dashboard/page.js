@@ -9,11 +9,19 @@ import DnsDomainStatus from "../components/dashboard/dnsDomainStatus";
 import SecurityHeadersStatus from "../components/dashboard/securityHeaderStatus";
 import IntegrityStatus from "../components/dashboard/integrityStatus";
 import SignOutButton from "../components/dashboard/signOutButton";
+import ActivityHistory from "../components/dashboard/activityHistory";
+import { getUserSubscription } from "@/utils/subscriptions";
+import Link from "next/link";
+import {
+  isPlatformAdmin,
+  syncPlatformAdminAccount,
+} from "@/utils/platform-admin";
 
 export const dynamic = "force-dynamic";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PERIOD_DAYS = 30;
+const ACTIVITY_PAGE_SIZE = 10;
 
 function isUp(status) {
   return ["up", "online", "ok", "success"].includes(
@@ -30,12 +38,6 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
-function formatDuration(value) {
-  if (value === null || value === undefined) return "—";
-
-  return `${Math.round(Number(value))} ms`;
-}
-
 function normalizeStatus(status) {
   const value = String(status ?? "").toLowerCase();
 
@@ -46,10 +48,6 @@ function normalizeStatus(status) {
   }
 
   return "unknown";
-}
-
-function getWebsiteName(website) {
-  return website?.client_name || website?.url || "Site sans nom";
 }
 
 function getAverageResponseTime(checks) {
@@ -64,49 +62,14 @@ function getAverageResponseTime(checks) {
   );
 }
 
-function buildDailyStats(checks) {
-  const now = new Date();
-  const days = [];
+export default async function DashboardPage({ searchParams }) {
+  const params = await searchParams;
+  const requestedPage = Number(params?.activityPage ?? 1);
+  const activityPage =
+    Number.isSafeInteger(requestedPage) && requestedPage > 0
+      ? requestedPage
+      : 1;
 
-  for (let offset = PERIOD_DAYS - 1; offset >= 0; offset--) {
-    const date = new Date(now);
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() - offset);
-
-    const nextDate = new Date(date);
-    nextDate.setDate(nextDate.getDate() + 1);
-
-    const dayChecks = checks.filter((check) => {
-      const timestamp = new Date(check.checked_at).getTime();
-
-      return (
-        Number.isFinite(timestamp) &&
-        timestamp >= date.getTime() &&
-        timestamp < nextDate.getTime()
-      );
-    });
-
-    const successfulChecks = dayChecks.filter((check) =>
-      isUp(check.status),
-    ).length;
-
-    days.push({
-      date: date.toISOString(),
-      label: new Intl.DateTimeFormat("fr-FR", {
-        day: "2-digit",
-        month: "2-digit",
-      }).format(date),
-      availability: dayChecks.length
-        ? Math.round((successfulChecks / dayChecks.length) * 1000) / 10
-        : null,
-      total: dayChecks.length,
-    });
-  }
-
-  return days;
-}
-
-export default async function DashboardPage() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -114,12 +77,20 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    if (authError) console.error("Vérification de session :", authError.message);
+    if (authError)
+      console.error("Vérification de session :", authError.message);
     redirect("/login");
   }
 
+  const platformAdmin = isPlatformAdmin(user);
+  if (platformAdmin) await syncPlatformAdminAccount(user);
+  const subscription = await getUserSubscription(user.id);
+  const canViewSecurityHeaders =
+    platformAdmin || subscription.features.security_headers;
+  const canViewIntegrity = platformAdmin || subscription.features.integrity;
   const now = Date.now();
-  const since = new Date(now - PERIOD_DAYS * DAY_MS).toISOString();
+  const historyDays = Math.max(1, subscription.historyDays || PERIOD_DAYS);
+  const since = new Date(now - historyDays * DAY_MS).toISOString();
 
   const currentPeriodStart = now - DAY_MS;
   const previousPeriodStart = now - 2 * DAY_MS;
@@ -127,7 +98,12 @@ export default async function DashboardPage() {
   const [
     { data: websites, error: websitesError },
     { data: checks, error: checksError },
-    { data: recentChecks, error: recentChecksError },
+    {
+      data: recentChecks,
+      error: recentChecksError,
+      count: recentChecksCount,
+    },
+    { data: lastCheck, error: lastCheckError },
     { data: incidents, error: incidentsError },
     { count: openIncidentsCount, error: openIncidentsError },
     { data: sslChecks, error: sslChecksError },
@@ -151,9 +127,21 @@ export default async function DashboardPage() {
 
     supabase
       .from("website_checks")
-      .select("*, websites(client_name, url)")
+      .select("*, websites(client_name, url)", { count: "exact" })
       .order("checked_at", { ascending: false })
-      .limit(10),
+      .order("id", { ascending: false })
+      .range(
+        (activityPage - 1) * ACTIVITY_PAGE_SIZE,
+        activityPage * ACTIVITY_PAGE_SIZE - 1,
+      ),
+
+    supabase
+      .from("website_checks")
+      .select("checked_at")
+      .order("checked_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
 
     supabase
       .from("website_incidents")
@@ -190,10 +178,11 @@ export default async function DashboardPage() {
       .order("checked_at", { ascending: false })
       .limit(500),
 
-    supabase
-      .from("website_security_checks")
-      .select(
-        `
+    canViewSecurityHeaders
+      ? supabase
+          .from("website_security_checks")
+          .select(
+            `
     id,
     website_id,
     checked_at,
@@ -211,13 +200,15 @@ export default async function DashboardPage() {
       client_name
     )
   `,
-      )
-      .order("checked_at", { ascending: false }),
+          )
+          .order("checked_at", { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
 
-    supabase
-      .from("website_integrity_scans")
-      .select(
-        `
+    canViewIntegrity
+      ? supabase
+          .from("website_integrity_scans")
+          .select(
+            `
     id,
     website_id,
     started_at,
@@ -229,9 +220,10 @@ export default async function DashboardPage() {
     error_message,
     websites(client_name, url)
   `,
-      )
-      .order("started_at", { ascending: false })
-      .limit(50),
+          )
+          .order("started_at", { ascending: false })
+          .limit(50)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   const scanList = integrityScans ?? [];
@@ -268,6 +260,7 @@ export default async function DashboardPage() {
     websitesError ||
     checksError ||
     recentChecksError ||
+    lastCheckError ||
     incidentsError ||
     openIncidentsError ||
     sslChecksError ||
@@ -287,9 +280,7 @@ export default async function DashboardPage() {
             Vérifie la connexion Supabase, les migrations et les permissions de
             la base de données.
           </p>
-          <p>
-            Détail technique : {error.message}
-          </p>
+          <p>Détail technique : {error.message}</p>
         </section>
       </main>
     );
@@ -298,7 +289,21 @@ export default async function DashboardPage() {
   const siteList = websites ?? [];
   const activeSites = siteList.filter((site) => site.active);
   const checkList = checks ?? [];
-  const latestChecks = recentChecks ?? [];
+  const activityChecks = recentChecks ?? [];
+  const activityTotal = recentChecksCount ?? 0;
+  const activityPageCount = Math.max(
+    1,
+    Math.ceil(activityTotal / ACTIVITY_PAGE_SIZE),
+  );
+
+  if (activityPage > activityPageCount) {
+    redirect(
+      activityPageCount === 1
+        ? "/dashboard#activity"
+        : `/dashboard?activityPage=${activityPageCount}#activity`,
+    );
+  }
+
   const incidentList = incidents ?? [];
   const openIncidentCount = openIncidentsCount ?? 0;
 
@@ -308,12 +313,19 @@ export default async function DashboardPage() {
     (site) => normalizeStatus(site.status) === "down",
   ).length;
 
-  const successfulChecks = checkList.filter((check) =>
+  const last30Checks = checkList.filter((check) => {
+    const timestamp = new Date(check.checked_at).getTime();
+    return (
+      Number.isFinite(timestamp) && timestamp >= now - PERIOD_DAYS * DAY_MS
+    );
+  });
+
+  const successfulChecks = last30Checks.filter((check) =>
     isUp(check.status),
   ).length;
 
-  const uptime = checkList.length
-    ? (successfulChecks / checkList.length) * 100
+  const uptime = last30Checks.length
+    ? (successfulChecks / last30Checks.length) * 100
     : null;
 
   // Contrôles des dernières 24 heures.
@@ -364,14 +376,14 @@ export default async function DashboardPage() {
           },
         )}% par rapport aux 24 h précédentes`;
 
-  const dailyStats = buildDailyStats(checkList);
-
   return (
     <main className={styles.page}>
       <div className={styles.container}>
         <header className={styles.header}>
           <div>
-            <span className={styles.eyebrow}>SITE MONITOR / VUE D’ENSEMBLE</span>
+            <span className={styles.eyebrow}>
+              SITE MONITOR / VUE D’ENSEMBLE
+            </span>
             <h1>Vue d’ensemble</h1>
             <p className={styles.subtitle}>
               L’état de tes sites et les points à surveiller, en un coup d’œil.
@@ -381,6 +393,11 @@ export default async function DashboardPage() {
           <div className={styles.headerMeta}>
             <span className={styles.liveDot} />
             <span>Prochain contrôle · 08:00 UTC</span>
+            {platformAdmin && (
+              <Link href="/admin" className={styles.subscriptionLink}>
+                Administration →
+              </Link>
+            )}
             <SignOutButton email={user.email} />
           </div>
         </header>
@@ -432,6 +449,22 @@ export default async function DashboardPage() {
           </article>
         </section>
 
+        {!platformAdmin && (
+          <section className={styles.subscriptionSummary}>
+            <div>
+              <span className={styles.secondaryLabel}>Forfait actuel</span>
+              <strong>{subscription.plan.name}</strong>
+              <span className={styles.subscriptionUsage}>
+                {siteList.length} / {subscription.maxSites} sites · historique{" "}
+                {subscription.historyDays} jours
+              </span>
+            </div>
+            <Link href="/billing" className={styles.subscriptionLink}>
+              Gérer mon forfait <span aria-hidden="true">→</span>
+            </Link>
+          </section>
+        )}
+
         <section className={styles.secondaryStats}>
           <div>
             <span className={styles.secondaryLabel}>
@@ -465,7 +498,7 @@ export default async function DashboardPage() {
           <div>
             <span className={styles.secondaryLabel}>Dernier contrôle reçu</span>
             <strong className={styles.lastCheck}>
-              {formatDate(latestChecks[0]?.checked_at)}
+              {formatDate(lastCheck?.checked_at)}
             </strong>
           </div>
         </section>
@@ -481,7 +514,17 @@ export default async function DashboardPage() {
         </nav>
 
         <div id="websites" className={styles.anchorSection}>
-          <WebsiteManager websites={siteList} />
+          <WebsiteManager
+            websites={siteList}
+            siteLimit={
+              platformAdmin
+                ? Number.POSITIVE_INFINITY
+                : subscription.maxSites
+            }
+            planName={
+              platformAdmin ? "administrateur" : subscription.plan.name
+            }
+          />
         </div>
 
         <div id="alerts" className={styles.anchorSection}>
@@ -495,14 +538,23 @@ export default async function DashboardPage() {
             <p>Certificats HTTPS et bonnes pratiques des en-têtes.</p>
           </div>
           <SslStatus checks={sslChecks ?? []} />
-          <SecurityHeadersStatus checks={securityChecks} />
+          {canViewSecurityHeaders ? (
+            <SecurityHeadersStatus checks={securityChecks} />
+          ) : (
+            <div className={styles.planGate}>
+              Les en-têtes de sécurité sont inclus dans les forfaits Starter et
+              Pro. <Link href="/billing">Découvrir les forfaits</Link>
+            </div>
+          )}
         </div>
 
         <div id="dns" className={styles.categorySection}>
           <div className={styles.categoryHeading}>
             <span className={styles.eyebrow}>RÉSOLUTION & ENREGISTREMENT</span>
             <h2>DNS & domaine</h2>
-            <p>Évolution des enregistrements et expiration connue du domaine.</p>
+            <p>
+              Évolution des enregistrements et expiration connue du domaine.
+            </p>
           </div>
           <DnsDomainStatus checks={dnsChecks ?? []} />
         </div>
@@ -513,11 +565,18 @@ export default async function DashboardPage() {
             <h2>Intégrité</h2>
             <p>Anomalies détectées lors de l’exploration des sites.</p>
           </div>
-          <IntegrityStatus
-            websites={siteList}
-            scans={scanList}
-            findings={integrityFindings}
-          />
+          {canViewIntegrity ? (
+            <IntegrityStatus
+              websites={siteList}
+              scans={scanList}
+              findings={integrityFindings}
+            />
+          ) : (
+            <div className={styles.planGate}>
+              Le contrôle d’intégrité est inclus dans les forfaits Starter et
+              Pro. <Link href="/billing">Découvrir les forfaits</Link>
+            </div>
+          )}
         </div>
 
         <section id="performance" className={styles.chartSection}>
@@ -526,9 +585,8 @@ export default async function DashboardPage() {
               <span className={styles.eyebrow}>PERFORMANCE</span>
               <h2>Disponibilité des sites</h2>
             </div>
-            <span className={styles.periodBadge}>30 derniers jours</span>
           </div>
-          <DashboardCharts data={dailyStats} />
+          <DashboardCharts checks={checkList} />
 
           <p className={styles.chartNote}>
             Le taux quotidien correspond aux contrôles réussis divisés par le
@@ -537,97 +595,11 @@ export default async function DashboardPage() {
           </p>
         </section>
 
-        <section id="activity" className={styles.tableSection}>
-          <div className={styles.sectionHeading}>
-            <div>
-              <span className={styles.eyebrow}>ACTIVITÉ</span>
-              <h2>Derniers contrôles</h2>
-            </div>
-            <span className={styles.periodBadge}>
-              {latestChecks.length} résultats
-            </span>
-          </div>
-
-          {latestChecks.length === 0 ? (
-            <div className={styles.emptyState}>
-              <span className={styles.emptyIcon}>◌</span>
-              <h3>Aucun contrôle enregistré</h3>
-              <p>
-                Les résultats apparaîtront ici après le premier passage de ton
-                système de surveillance.
-              </p>
-            </div>
-          ) : (
-            <div className={styles.tableWrapper}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Site</th>
-                    <th>Statut</th>
-                    <th>Code HTTP</th>
-                    <th>Réponse</th>
-                    <th>Date</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {latestChecks.map((check) => {
-                    const status = normalizeStatus(check.status);
-                    const siteName = getWebsiteName(check.websites);
-
-                    return (
-                      <tr key={check.id}>
-                        <td>
-                          <div className={styles.siteCell}>
-                            <span
-                              className={`${styles.statusDot} ${
-                                status === "up"
-                                  ? styles.green
-                                  : status === "down"
-                                    ? styles.red
-                                    : styles.gray
-                              }`}
-                            />
-                            <div className={styles.siteInfo}>
-                              <strong>{siteName}</strong>
-                              {check.websites?.url && (
-                                <span>{check.websites.url}</span>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-
-                        <td>
-                          <span
-                            className={`${styles.statusBadge} ${
-                              status === "up"
-                                ? styles.badgeUp
-                                : status === "down"
-                                  ? styles.badgeDown
-                                  : styles.badgeUnknown
-                            }`}
-                          >
-                            {status === "up"
-                              ? "En ligne"
-                              : status === "down"
-                                ? "En panne"
-                                : "Inconnu"}
-                          </span>
-                        </td>
-
-                        <td>{check.status_code ?? "—"}</td>
-                        <td>{formatDuration(check.response_ms)}</td>
-                        <td className={styles.dateCell}>
-                          {formatDate(check.checked_at)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+        <ActivityHistory
+          initialChecks={activityChecks}
+          initialPage={activityPage}
+          total={activityTotal}
+        />
 
         <footer className={styles.footer}>
           <span>Site Monitor</span>

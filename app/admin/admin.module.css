@@ -1,0 +1,134 @@
+.shell {
+  min-height: 100vh;
+  background: #0b1120;
+  color: #e5edf8;
+}
+
+.topbar {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 28px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.13);
+  background: #0d1525;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #f3f7ff;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-decoration: none;
+}
+
+.brand span {
+  color: #91b4ff;
+}
+
+.brand small {
+  margin-left: 5px;
+  padding: 4px 6px;
+  border: 1px solid rgba(124, 156, 255, 0.25);
+  border-radius: 5px;
+  color: #aabfff;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  color: #8796ad;
+  font-size: 12px;
+}
+
+.account a,
+.sidebar a {
+  color: #c4d0e2;
+  text-decoration: none;
+}
+
+.account a:hover,
+.sidebar a:hover {
+  color: #91b4ff;
+}
+
+.layout {
+  display: grid;
+  min-height: calc(100vh - 69px);
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 28px 16px;
+  border-right: 1px solid rgba(148, 163, 184, 0.13);
+}
+
+.navLabel {
+  margin: 0 10px 10px;
+  color: #75849c;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+}
+
+.sidebar a {
+  padding: 11px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.sidebar a:hover {
+  background: rgba(96, 145, 255, 0.08);
+}
+
+.content {
+  min-width: 0;
+  padding: 32px clamp(18px, 4vw, 52px) 60px;
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    padding: 0 16px;
+  }
+
+  .account span {
+    display: none;
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 4px;
+    padding: 10px 12px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.13);
+  }
+
+  .navLabel {
+    display: none;
+  }
+
+  .sidebar a {
+    flex: 0 0 auto;
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+
+  .content {
+    padding: 24px 14px 40px;
+  }
+}

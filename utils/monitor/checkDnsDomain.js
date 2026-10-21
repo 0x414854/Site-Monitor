@@ -292,7 +292,7 @@ function getRecordChangeDescription(changes) {
     .join("\n");
 }
 
-export async function checkDnsAndDomain(site) {
+export async function checkDnsAndDomain(site, { sendAlerts = true } = {}) {
   let hostname;
 
   try {
@@ -354,84 +354,86 @@ export async function checkDnsAndDomain(site) {
 
   let alertsSent = 0;
   let alertRetryRequired = false;
-  const checkedDay = new Date().toISOString().slice(0, 10);
+  if (sendAlerts) {
+    const checkedDay = new Date().toISOString().slice(0, 10);
 
-  if (dnsResult.status === "missing" && previous?.dns_status !== "missing") {
-    const sent = await sendAlert(
-      site,
-      "dns_missing",
-      `${checkedDay}:missing`,
-      `[Alerte DNS] Résolution manquante pour ${site.url}`,
-      [
-        `La résolution DNS de ${hostname} ne retourne aucun enregistrement A ou AAAA.`,
-        `Site : ${site.url}`,
-        `Contrôle : ${new Date().toISOString()}`,
-      ].join("\n"),
-    );
-    alertsSent += Number(sent === "sent");
-    alertRetryRequired ||= sent === "failed";
-  } else if (
-    dnsResult.status === "resolved" &&
-    previous?.dns_status === "missing"
-  ) {
-    const sent = await sendAlert(
-      site,
-      "dns_recovered",
-      `${checkedDay}:recovered`,
-      `[Rétablissement DNS] ${site.url}`,
-      `La résolution DNS de ${hostname} fonctionne de nouveau.\nSite : ${site.url}`,
-    );
-    alertsSent += Number(sent === "sent");
-    alertRetryRequired ||= sent === "failed";
-  } else if (dnsChanges.length > 0) {
-    const changeSummary = getRecordChangeDescription(dnsChanges);
-    const key = getAlertKey(`${checkedDay}:${JSON.stringify(dnsChanges)}`);
-    const sent = await sendAlert(
-      site,
-      "dns_changed",
-      key,
-      `[Alerte DNS] Enregistrements modifiés pour ${site.url}`,
-      [
-        `Un ou plusieurs enregistrements DNS de ${hostname} ont changé depuis le dernier contrôle.`,
-        "",
-        changeSummary,
-        "",
-        `Site : ${site.url}`,
-        `Contrôle : ${new Date().toISOString()}`,
-      ].join("\n"),
-    );
-    alertsSent += Number(sent === "sent");
-    alertRetryRequired ||= sent === "failed";
-  }
+    if (dnsResult.status === "missing" && previous?.dns_status !== "missing") {
+      const sent = await sendAlert(
+        site,
+        "dns_missing",
+        `${checkedDay}:missing`,
+        `[Alerte DNS] Résolution manquante pour ${site.url}`,
+        [
+          `La résolution DNS de ${hostname} ne retourne aucun enregistrement A ou AAAA.`,
+          `Site : ${site.url}`,
+          `Contrôle : ${new Date().toISOString()}`,
+        ].join("\n"),
+      );
+      alertsSent += Number(sent === "sent");
+      alertRetryRequired ||= sent === "failed";
+    } else if (
+      dnsResult.status === "resolved" &&
+      previous?.dns_status === "missing"
+    ) {
+      const sent = await sendAlert(
+        site,
+        "dns_recovered",
+        `${checkedDay}:recovered`,
+        `[Rétablissement DNS] ${site.url}`,
+        `La résolution DNS de ${hostname} fonctionne de nouveau.\nSite : ${site.url}`,
+      );
+      alertsSent += Number(sent === "sent");
+      alertRetryRequired ||= sent === "failed";
+    } else if (dnsChanges.length > 0) {
+      const changeSummary = getRecordChangeDescription(dnsChanges);
+      const key = getAlertKey(`${checkedDay}:${JSON.stringify(dnsChanges)}`);
+      const sent = await sendAlert(
+        site,
+        "dns_changed",
+        key,
+        `[Alerte DNS] Enregistrements modifiés pour ${site.url}`,
+        [
+          `Un ou plusieurs enregistrements DNS de ${hostname} ont changé depuis le dernier contrôle.`,
+          "",
+          changeSummary,
+          "",
+          `Site : ${site.url}`,
+          `Contrôle : ${new Date().toISOString()}`,
+        ].join("\n"),
+      );
+      alertsSent += Number(sent === "sent");
+      alertRetryRequired ||= sent === "failed";
+    }
 
-  const previousExpiry = previous?.domain_expires_at
-    ? new Date(previous.domain_expires_at).toISOString()
-    : null;
+    const previousExpiry = previous?.domain_expires_at
+      ? new Date(previous.domain_expires_at).toISOString()
+      : null;
 
-  if (
-    domainAlert &&
-    (previous?.domain_alert_level !== domainAlert.level ||
-      previousExpiry !== domainResult.expiresAt)
-  ) {
-    const expiryLabel =
-      domainAlert.level === "expired"
-        ? "Le domaine est expiré"
-        : `Le domaine expire dans ${domainAlert.daysLeft} jour(s)`;
-    const key = `${domainResult.expiresAt}:${domainAlert.level}`;
-    const sent = await sendAlert(
-      site,
-      "domain_expiry",
-      key,
-      `[Alerte domaine] ${expiryLabel} — ${site.url}`,
-      [
-        expiryLabel,
-        `Domaine : ${getDomainName(hostname) ?? hostname}`,
-        `Date d'expiration RDAP : ${domainResult.expiresAt}`,
-        `Site : ${site.url}`,
-      ].join("\n"),
-    );
-    alertsSent += Number(sent === "sent");
-    alertRetryRequired ||= sent === "failed";
+    if (
+      domainAlert &&
+      (previous?.domain_alert_level !== domainAlert.level ||
+        previousExpiry !== domainResult.expiresAt)
+    ) {
+      const expiryLabel =
+        domainAlert.level === "expired"
+          ? "Le domaine est expiré"
+          : `Le domaine expire dans ${domainAlert.daysLeft} jour(s)`;
+      const key = `${domainResult.expiresAt}:${domainAlert.level}`;
+      const sent = await sendAlert(
+        site,
+        "domain_expiry",
+        key,
+        `[Alerte domaine] ${expiryLabel} — ${site.url}`,
+        [
+          expiryLabel,
+          `Domaine : ${getDomainName(hostname) ?? hostname}`,
+          `Date d'expiration RDAP : ${domainResult.expiresAt}`,
+          `Site : ${site.url}`,
+        ].join("\n"),
+      );
+      alertsSent += Number(sent === "sent");
+      alertRetryRequired ||= sent === "failed";
+    }
   }
 
   if (alertRetryRequired) {

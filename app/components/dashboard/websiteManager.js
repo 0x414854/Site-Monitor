@@ -24,12 +24,17 @@ function getStatus(status) {
   return { label: "État inconnu", className: styles.statusUnknown };
 }
 
-export default function WebsiteManager({ websites = [] }) {
+export default function WebsiteManager({
+  websites = [],
+  siteLimit = Number.POSITIVE_INFINITY,
+  planName = "",
+}) {
   const router = useRouter();
   const [sites, setSites] = useState(websites);
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const limitReached = sites.length >= siteLimit;
 
   function handleCreate(formData) {
     setMessage(null);
@@ -142,6 +147,14 @@ export default function WebsiteManager({ websites = [] }) {
   function toggleForm() {
     if (pending) return;
 
+    if (limitReached) {
+      setMessage({
+        type: "error",
+        text: `La limite de ${siteLimit} site${siteLimit > 1 ? "s" : ""} du forfait ${planName} est atteinte. Change de forfait pour ajouter un site.`,
+      });
+      return;
+    }
+
     setIsFormOpen((open) => !open);
     setMessage(null);
   }
@@ -168,12 +181,18 @@ export default function WebsiteManager({ websites = [] }) {
             onClick={toggleForm}
             aria-expanded={isFormOpen}
             aria-controls="website-create-form"
-            disabled={pending}
+            disabled={pending || limitReached}
           >
             <span className={styles.addIcon} aria-hidden="true">
               {isFormOpen ? "−" : "+"}
             </span>
-            <span>{isFormOpen ? "Fermer" : "Ajouter un site"}</span>
+            <span>
+              {limitReached
+                ? "Limite du forfait atteinte"
+                : isFormOpen
+                  ? "Fermer"
+                  : "Ajouter un site"}
+            </span>
           </button>
         </div>
       </div>
@@ -251,6 +270,13 @@ export default function WebsiteManager({ websites = [] }) {
             </button>
           </div>
         </form>
+      )}
+
+      {limitReached && (
+        <p className={styles.limitNotice}>
+          Tu utilises {sites.length} / {siteLimit} sites avec le forfait{" "}
+          {planName}. <a href="/billing">Voir les forfaits</a>
+        </p>
       )}
 
       {message && (

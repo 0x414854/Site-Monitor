@@ -6,7 +6,13 @@ import SslStatus from "@/app/components/dashboard/sslStatus";
 import DnsDomainStatus from "@/app/components/dashboard/dnsDomainStatus";
 import SecurityHeadersStatus from "@/app/components/dashboard/securityHeaderStatus";
 import DashboardCharts from "@/app/components/dashboard/dashboardChart";
+import IntegrityStatus from "@/app/components/dashboard/integrityStatus";
 import styles from "@/styles/page/dashboard.module.css";
+import { getUserSubscription } from "@/utils/subscriptions";
+import {
+  isPlatformAdmin,
+  syncPlatformAdminAccount,
+} from "@/utils/platform-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +65,13 @@ export default async function WebsiteDetailPage({ params }) {
 
   if (!website) notFound();
 
-  const since = new Date(Date.now() - 30 * 86400000).toISOString();
+  const platformAdmin = isPlatformAdmin(user);
+  if (platformAdmin) await syncPlatformAdminAccount(user);
+  const subscription = await getUserSubscription(user.id);
+  const canViewSecurityHeaders =
+    platformAdmin || subscription.features.security_headers;
+  const historyDays = Math.max(1, subscription.historyDays || 30);
+  const since = new Date(Date.now() - historyDays * 86400000).toISOString();
 
   const [
     { data: checks, error: checksError },
@@ -67,6 +79,7 @@ export default async function WebsiteDetailPage({ params }) {
     { data: sslChecks, error: sslError },
     { data: dnsChecks, error: dnsChecksError },
     { data: securityChecks, error: securityError },
+    { data: integrityScans, error: integrityScansError },
   ] = await Promise.all([
     supabase
       .from("website_checks")
@@ -101,12 +114,25 @@ export default async function WebsiteDetailPage({ params }) {
       .order("checked_at", { ascending: false })
       .limit(30),
 
-    supabase
+    canViewSecurityHeaders
+      ? supabase
       .from("website_security_checks")
       .select("*")
       .eq("website_id", website.id)
       .order("checked_at", { ascending: false })
-      .limit(1),
+      .limit(1)
+      : Promise.resolve({ data: [], error: null }),
+
+    platformAdmin || subscription.features.integrity
+      ? supabase
+          .from("website_integrity_scans")
+          .select(
+            "id, website_id, started_at, finished_at, status, pages_checked, links_checked, findings_count, error_message",
+          )
+          .eq("website_id", website.id)
+          .order("started_at", { ascending: false })
+          .limit(50)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (
@@ -114,7 +140,8 @@ export default async function WebsiteDetailPage({ params }) {
     incidentsError ||
     sslError ||
     dnsChecksError ||
-    securityError
+    securityError ||
+    integrityScansError
   ) {
     console.error("Chargement des détails du site :", {
       checksError,
@@ -122,9 +149,34 @@ export default async function WebsiteDetailPage({ params }) {
       sslError,
       dnsChecksError,
       securityError,
+      integrityScansError,
     });
 
     throw new Error("Impossible de charger les données de surveillance.");
+  }
+
+  const scanList = integrityScans ?? [];
+  const { data: integrityFindings, error: integrityFindingsError } =
+    scanList.length && (platformAdmin || subscription.features.integrity)
+      ? await supabase
+          .from("website_integrity_findings")
+          .select(
+            "id, scan_id, category, severity, url, status_code, message, details, created_at",
+          )
+          .in(
+            "scan_id",
+            scanList.map((scan) => scan.id),
+          )
+          .order("created_at", { ascending: false })
+          .limit(500)
+      : { data: [], error: null };
+
+  if (integrityFindingsError) {
+    console.error(
+      "Chargement des anomalies d’intégrité :",
+      integrityFindingsError.message,
+    );
+    throw new Error("Impossible de charger les anomalies d’intégrité.");
   }
 
   const checkList = checks ?? [];
@@ -149,39 +201,6 @@ export default async function WebsiteDetailPage({ params }) {
           responseTimes.length,
       )
     : null;
-
-  const days = [];
-  const now = new Date();
-
-  for (let offset = 29; offset >= 0; offset--) {
-    const date = new Date(now);
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() - offset);
-
-    const next = new Date(date);
-    next.setDate(next.getDate() + 1);
-
-    const daily = checkList.filter((check) => {
-      const timestamp = new Date(check.checked_at).getTime();
-      return timestamp >= date.getTime() && timestamp < next.getTime();
-    });
-
-    const good = daily.filter(
-      (check) => normalizeStatus(check.status) === "up",
-    ).length;
-
-    days.push({
-      date: date.toISOString(),
-      label: new Intl.DateTimeFormat("fr-FR", {
-        day: "2-digit",
-        month: "2-digit",
-      }).format(date),
-      availability: daily.length
-        ? Math.round((good / daily.length) * 1000) / 10
-        : null,
-      total: daily.length,
-    });
-  }
 
   return (
     <main className={styles.page}>
@@ -241,7 +260,9 @@ export default async function WebsiteDetailPage({ params }) {
             <strong className={styles.statValue}>
               {uptime === null ? "—" : `${uptime}%`}
             </strong>
-            <span className={styles.statCaption}>30 derniers jours</span>
+            <span className={styles.statCaption}>
+              {historyDays} derniers jours disponibles
+            </span>
           </article>
 
           <article className={styles.statCard}>
@@ -264,7 +285,7 @@ export default async function WebsiteDetailPage({ params }) {
               {formatDate(latestCheck?.checked_at)}
             </strong>
             <span className={styles.statCaption}>
-              {checkList.length} contrôles sur 30 jours
+              {checkList.length} contrôles sur {historyDays} jours
             </span>
           </article>
         </section>
@@ -274,6 +295,7 @@ export default async function WebsiteDetailPage({ params }) {
           <a href="#incidents">Incidents</a>
           <a href="#security">Sécurité</a>
           <a href="#dns">DNS & domaine</a>
+          <a href="#integrity">Intégrité</a>
           <a href="#activity">Historique</a>
         </nav>
 
@@ -283,9 +305,8 @@ export default async function WebsiteDetailPage({ params }) {
               <span className={styles.eyebrow}>PERFORMANCE</span>
               <h2>Disponibilité du site</h2>
             </div>
-            <span className={styles.periodBadge}>30 derniers jours</span>
           </div>
-          <DashboardCharts data={days} />
+          <DashboardCharts checks={checkList} />
         </section>
 
         <div id="incidents" className={styles.anchorSection}>
@@ -299,17 +320,24 @@ export default async function WebsiteDetailPage({ params }) {
             <p>Certificat HTTPS et configuration des en-têtes.</p>
           </div>
           <SslStatus checks={sslChecks ?? []} />
-          <SecurityHeadersStatus
-            checks={(securityChecks ?? []).map((check) => ({
-              ...check,
-              website: {
+          {canViewSecurityHeaders ? (
+            <SecurityHeadersStatus
+              checks={(securityChecks ?? []).map((check) => ({
+                ...check,
+                website: {
+                  client_name: website.client_name,
+                  url: website.url,
+                },
+                website_url: website.url,
                 client_name: website.client_name,
-                url: website.url,
-              },
-              website_url: website.url,
-              client_name: website.client_name,
-            }))}
-          />
+              }))}
+            />
+          ) : (
+            <div className={styles.planGate}>
+              Le contrôle des en-têtes est inclus dans les forfaits Starter et
+              Pro. <Link href="/billing">Découvrir les forfaits</Link>
+            </div>
+          )}
         </div>
 
         <div id="dns" className={styles.categorySection}>
@@ -320,6 +348,16 @@ export default async function WebsiteDetailPage({ params }) {
           </div>
           <DnsDomainStatus checks={dnsChecks ?? []} showHistory />
         </div>
+
+        {(platformAdmin || subscription.features.integrity) && (
+          <div id="integrity" className={styles.categorySection}>
+            <IntegrityStatus
+              websites={[website]}
+              scans={scanList}
+              findings={integrityFindings ?? []}
+            />
+          </div>
+        )}
 
         <section id="activity" className={styles.tableSection}>
           <div className={styles.sectionHeading}>

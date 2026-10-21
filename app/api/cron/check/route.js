@@ -5,6 +5,10 @@ import { validatePublicUrl } from "@/utils/monitor/validate-url";
 import { checkSsl } from "@/utils/monitor/check-ssl";
 import { checkSecurityHeaders } from "@/utils/monitor/checkSecurityHeaders";
 import { checkDnsAndDomain } from "@/utils/monitor/checkDnsDomain";
+import {
+  getSubscriptionsByUserIds,
+  isCheckDue,
+} from "@/utils/subscriptions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -200,9 +204,12 @@ async function sendSslExpirationAlert(site, sslResult) {
   }
 }
 
-async function checkWebsite(site) {
+async function checkWebsite(site, subscription) {
   const startedAt = Date.now();
-  const dnsDomainPromise = checkDnsAndDomain(site).catch((error) => {
+  const dnsDomainPromise = subscription.features.dns
+    ? checkDnsAndDomain(site, {
+        sendAlerts: subscription.features.advanced_alerts,
+      }).catch((error) => {
     console.error(
       `[DNS] Échec du contrôle pour ${site.url} :`,
       error instanceof Error ? error.message : "Erreur inconnue",
@@ -214,7 +221,8 @@ async function checkWebsite(site) {
           ? error.message
           : "Échec de l'enregistrement du contrôle DNS.",
     };
-  });
+      })
+    : Promise.resolve({ skipped: true, reason: "Plan excludes DNS checks" });
 
   let statusCode = null;
   let errorMessage = null;
@@ -306,45 +314,48 @@ async function checkWebsite(site) {
     };
   }
 
-  try {
-    const sslResult = await checkSsl(site.url);
+  if (subscription.features.ssl) {
+    try {
+      const sslResult = await checkSsl(site.url);
 
-    const { error: sslError } = await supabaseAdmin
-      .from("website_ssl_checks")
-      .insert({
-        website_id: site.id,
-        https_reachable: sslResult.https_reachable,
-        certificate_valid: sslResult.certificate_valid,
-        hostname_match: sslResult.hostname_match,
-        certificate_expires_at: sslResult.certificate_expires_at,
-        http_redirects_to_https: sslResult.http_redirects_to_https,
-        error_message: sslResult.error_message,
-      });
+      const { error: sslError } = await supabaseAdmin
+        .from("website_ssl_checks")
+        .insert({
+          website_id: site.id,
+          https_reachable: sslResult.https_reachable,
+          certificate_valid: sslResult.certificate_valid,
+          hostname_match: sslResult.hostname_match,
+          certificate_expires_at: sslResult.certificate_expires_at,
+          http_redirects_to_https: sslResult.http_redirects_to_https,
+          error_message: sslResult.error_message,
+        });
 
-    if (sslError) {
+      if (sslError) {
+        console.error(
+          `[SSL] Échec d'enregistrement pour ${site.url} :`,
+          sslError.message,
+        );
+      } else {
+        sslSaved = true;
+        console.log(`[SSL] Contrôle enregistré pour ${site.url}`);
+      }
+
+      sslAlert = subscription.features.advanced_alerts
+        ? await sendSslExpirationAlert(site, sslResult)
+        : { sent: false, reason: "Plan excludes advanced alerts" };
+    } catch (sslError) {
       console.error(
-        `[SSL] Échec d'enregistrement pour ${site.url} :`,
-        sslError.message,
+        `[SSL] Échec du contrôle pour ${site.url} :`,
+        sslError instanceof Error ? sslError.message : "Erreur inconnue",
       );
-    } else {
-      sslSaved = true;
-      console.log(`[SSL] Contrôle enregistré pour ${site.url}`);
     }
-
-    // L'envoi d'alerte est indépendant de l'enregistrement de l'historique SSL.
-    sslAlert = await sendSslExpirationAlert(site, sslResult);
-  } catch (sslError) {
-    console.error(
-      `[SSL] Échec du contrôle pour ${site.url} :`,
-      sslError instanceof Error ? sslError.message : "Erreur inconnue",
-    );
   }
 
   let securitySaved = false;
   let securityResult = null;
 
   try {
-    if (securityHeaders) {
+    if (subscription.features.security_headers && securityHeaders) {
       securityResult = checkSecurityHeaders(securityHeaders, securityIsHttps);
 
       const { error: securityError } = await supabaseAdmin
@@ -489,9 +500,8 @@ export async function GET(request) {
   const { data: sites, error } = await supabaseAdmin
     .from("websites")
     .select(
-      "id, client_name, url, notification_email, status, consecutive_failures, created_at, last_checked_at, active",
+      "id, owner_id, client_name, url, notification_email, status, consecutive_failures, created_at, last_checked_at, active",
     )
-    .eq("active", true)
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -506,15 +516,77 @@ export async function GET(request) {
     );
   }
 
+  let subscriptions;
+
+  try {
+    subscriptions = await getSubscriptionsByUserIds(
+      (sites ?? []).map((site) => site.owner_id),
+    );
+  } catch (subscriptionError) {
+    console.error(
+      "[Cron] Impossible de charger les forfaits des sites :",
+      subscriptionError instanceof Error
+        ? subscriptionError.message
+        : "Erreur inconnue",
+    );
+    return NextResponse.json(
+      { error: "Impossible de vérifier les droits des sites." },
+      { status: 500 },
+    );
+  }
+
+  const now = Date.now();
+  const siteCountByOwner = new Map();
+  const eligibleSites = [];
+  let skippedByPlan = 0;
+  let skippedByQuota = 0;
+  let skippedNotDue = 0;
+
+  for (const site of sites ?? []) {
+    const subscription = subscriptions.get(site.owner_id);
+
+    if (!subscription?.plan || !subscription.checkIntervalHours) {
+      skippedByPlan += Number(site.active);
+      continue;
+    }
+
+    const usedSlots = siteCountByOwner.get(site.owner_id) ?? 0;
+    siteCountByOwner.set(site.owner_id, usedSlots + 1);
+
+    if (usedSlots >= subscription.maxSites) {
+      skippedByQuota += Number(site.active);
+      continue;
+    }
+
+    if (!site.active) continue;
+    if (!subscription.features.http) {
+      skippedByPlan += 1;
+      continue;
+    }
+
+    if (
+      !isCheckDue(
+        site.last_checked_at,
+        subscription.checkIntervalHours,
+        now,
+      )
+    ) {
+      skippedNotDue += 1;
+      continue;
+    }
+
+    eligibleSites.push({ site, subscription });
+  }
+
   const results = [];
 
-  for (let i = 0; i < (sites ?? []).length; i += BATCH_SIZE) {
-    const batch = sites.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < eligibleSites.length; i += BATCH_SIZE) {
+    const batch = eligibleSites.slice(i, i + BATCH_SIZE);
 
     const batchResults = await Promise.all(
-      batch.map(async (site) => {
+      batch.map(async ({ site, subscription }) => {
         try {
-          return await checkWebsite(site);
+          return await checkWebsite(site, subscription);
         } catch (error) {
           console.error(
             `Erreur de contrôle pour ${site.url} :`,
@@ -541,6 +613,9 @@ export async function GET(request) {
 
   return NextResponse.json({
     checked: results.length,
+    skippedByPlan,
+    skippedByQuota,
+    skippedNotDue,
     checkFailures,
     batchSize: BATCH_SIZE,
     notifications,

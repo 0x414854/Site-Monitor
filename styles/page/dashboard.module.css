@@ -208,6 +208,7 @@
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
 }
 
+/* En-tête des sections */
 .sectionHeading {
   display: flex;
   align-items: center;
@@ -236,6 +237,82 @@
   background: rgba(96, 145, 255, 0.07);
   color: #b9ceff;
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Pagination de l'activité */
+.activityPagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(148, 163, 184, 0.09);
+  color: var(--dash-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.activityPagination > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activityPagination button,
+.paginationDisabled {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 8px 11px;
+  border: 1px solid var(--dash-border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.015);
+  color: #c4d7ff;
+  font: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+  cursor: pointer;
+}
+
+.activityPagination button:hover:not(:disabled) {
+  border-color: rgba(124, 156, 255, 0.35);
+  background: rgba(96, 145, 255, 0.09);
+  color: #edf3ff;
+}
+
+.activityPagination button:focus-visible {
+  outline: 2px solid var(--dash-accent);
+  outline-offset: 3px;
+}
+
+.activityPagination button:disabled {
+  color: #68778e;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.paginationDisabled {
+  color: #68778e;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.activityError {
+  margin: 0 0 14px;
+  padding: 11px 13px;
+  border: 1px solid rgba(255, 146, 157, 0.22);
+  border-radius: 9px;
+  background: rgba(255, 146, 157, 0.06);
+  color: #ff929d;
+  font-size: 12px;
 }
 
 .chartNote {
@@ -245,11 +322,13 @@
   line-height: 1.7;
 }
 
+/* Tableau des derniers contrôles */
 .tableWrapper {
   width: 100%;
   overflow-x: auto;
-  border: 1px solid var(--dash-border);
-  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 13px;
+  background: rgba(5, 11, 23, 0.2);
   scrollbar-color: #34435c transparent;
   scrollbar-width: thin;
 }
@@ -263,24 +342,34 @@
 }
 
 .table thead {
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(148, 163, 184, 0.045);
 }
 
 .table th {
-  padding: 13px 14px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--dash-border);
   color: #8fa1bb;
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-weight: 750;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 
+.table th:first-child {
+  padding-left: 18px;
+}
+
 .table td {
-  padding: 16px 14px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.09);
+  padding: 16px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.075);
   color: #d6dfed;
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+}
+
+.table td:first-child {
+  padding-left: 18px;
 }
 
 .table tbody tr:last-child td {
@@ -293,13 +382,29 @@
 }
 
 .table tbody tr:hover {
-  background: var(--dash-surface-hover);
+  background: rgba(124, 156, 255, 0.045);
 }
 
+/* Nom et URL du site */
 .siteCell {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
+  min-width: 190px;
+}
+
+.siteCell .statusDot {
+  width: 8px;
+  height: 8px;
+  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.055);
+}
+
+.siteCell .green {
+  box-shadow: 0 0 0 4px rgba(114, 230, 176, 0.08);
+}
+
+.siteCell .red {
+  box-shadow: 0 0 0 4px rgba(255, 146, 157, 0.08);
 }
 
 .siteInfo {
@@ -310,7 +415,8 @@
 }
 
 .siteInfo strong {
-  max-width: 230px;
+  display: block;
+  max-width: 260px;
   overflow: hidden;
   color: #f1f5fc;
   font-size: 12px;
@@ -319,22 +425,25 @@
 }
 
 .siteInfo span {
-  max-width: 230px;
+  display: block;
+  max-width: 260px;
   overflow: hidden;
-  color: var(--dash-muted);
+  color: #8191a9;
   font-size: 10px;
   text-overflow: ellipsis;
 }
 
+/* Statuts */
 .statusBadge {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 6px 9px;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
   border: 1px solid transparent;
   border-radius: 7px;
   font-size: 10px;
-  font-weight: 650;
+  font-weight: 700;
   line-height: 1.35;
 }
 
@@ -358,29 +467,44 @@
 
 .dateCell {
   color: var(--dash-muted) !important;
+  font-size: 11px !important;
 }
 
+/* Aucun contrôle */
 .emptyState {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 40px 20px;
+  padding: 48px 20px;
+  border: 1px dashed rgba(148, 163, 184, 0.16);
+  border-radius: 13px;
+  background: rgba(5, 11, 23, 0.12);
   text-align: center;
 }
 
 .emptyIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(124, 156, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(96, 145, 255, 0.07);
   color: #91b4ff;
-  font-size: 30px;
+  font-size: 28px;
 }
 
 .emptyState h3 {
-  margin: 15px 0 5px;
+  margin: 16px 0 5px;
   color: #e5edf8;
   font-size: 15px;
+  font-weight: 650;
 }
 
 .emptyState p {
   max-width: 380px;
+  margin: 0;
   color: var(--dash-muted);
   font-size: 12px;
   line-height: 1.7;
@@ -544,6 +668,70 @@
   color: #72e6b0;
 }
 
+.subscriptionSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 16px 20px;
+  border: 1px solid var(--dash-border);
+  border-radius: 14px;
+  background:
+    linear-gradient(110deg, rgba(96, 145, 255, 0.07), transparent 60%),
+    var(--dash-surface);
+}
+
+.subscriptionSummary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.subscriptionSummary strong {
+  color: #e5edf8;
+  font-size: 15px;
+}
+
+.subscriptionUsage {
+  color: var(--dash-muted);
+  font-size: 11px;
+}
+
+.subscriptionLink {
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  border: 1px solid rgba(124, 156, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(96, 145, 255, 0.08);
+  color: #c4d7ff;
+  font-size: 11px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.subscriptionLink:hover {
+  background: rgba(96, 145, 255, 0.14);
+}
+
+.planGate {
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid rgba(124, 156, 255, 0.17);
+  border-radius: 12px;
+  background: rgba(96, 145, 255, 0.055);
+  color: #aab7cb;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.planGate a {
+  color: #b9ceff;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 @media (max-width: 1000px) {
   .statsGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -599,6 +787,11 @@
     padding: 18px;
   }
 
+  .subscriptionSummary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .sectionNav {
     top: 8px;
     margin-top: 16px;
@@ -635,6 +828,45 @@
     font-size: 9px;
   }
 
+  .tableWrapper {
+    border-radius: 10px;
+  }
+
+  .table th {
+    padding: 12px;
+    font-size: 9px;
+  }
+
+  .table td {
+    padding: 14px 12px;
+  }
+
+  .siteCell {
+    min-width: 175px;
+    gap: 10px;
+  }
+
+  .siteInfo strong,
+  .siteInfo span {
+    max-width: 190px;
+  }
+
+  .activityPagination {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .activityPagination > div {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .activityPagination button,
+  .paginationDisabled {
+    min-height: 36px;
+  }
+
   .footer {
     flex-direction: column;
     line-height: 1.6;
@@ -647,12 +879,17 @@
   .categoryHeading h2 {
     font-size: 20px;
   }
+
+  .emptyState {
+    padding: 36px 15px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .statCard,
   .table tbody tr,
-  .sectionNav a {
+  .sectionNav a,
+  .activityPagination button {
     transition: none;
   }
 

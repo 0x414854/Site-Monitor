@@ -1,4 +1,91 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import styles from "@/styles/components/dashboard/dashboardChart.module.css";
+
+const HOUR_MS = 60 * 60 * 1000;
+const PERIODS = [
+  { value: "30d", label: "30 jours", days: 30 },
+  { value: "15d", label: "15 jours", days: 15 },
+  { value: "7d", label: "7 jours", days: 7 },
+  { value: "24h", label: "24 h", hours: 24 },
+];
+
+function getAvailability(checks) {
+  if (checks.length === 0) return null;
+
+  const successful = checks.filter((check) =>
+    ["up", "online", "ok", "success"].includes(
+      String(check.status ?? "").toLowerCase(),
+    ),
+  ).length;
+
+  return Math.round((successful / checks.length) * 1000) / 10;
+}
+
+function buildSeries(checks, period, now) {
+  if (period === "24h") {
+    const start = now - 24 * HOUR_MS;
+
+    return Array.from({ length: 24 }, (_, index) => {
+      const bucketStart = start + index * HOUR_MS;
+      const bucketEnd = bucketStart + HOUR_MS;
+      const bucketChecks = checks.filter((check) => {
+        const timestamp = new Date(check.checked_at).getTime();
+
+        return (
+          Number.isFinite(timestamp) &&
+          timestamp >= bucketStart &&
+          timestamp < bucketEnd &&
+          timestamp <= now
+        );
+      });
+
+      return {
+        date: new Date(bucketStart).toISOString(),
+        label: new Intl.DateTimeFormat("fr-FR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(new Date(bucketStart)),
+        availability: getAvailability(bucketChecks),
+        total: bucketChecks.length,
+      };
+    });
+  }
+
+  const days = PERIODS.find((item) => item.value === period)?.days ?? 30;
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+
+  return Array.from({ length: days }, (_, index) => {
+    const bucketStart = new Date(today);
+    bucketStart.setDate(today.getDate() - days + index + 1);
+
+    const bucketEnd = new Date(bucketStart);
+    bucketEnd.setDate(bucketEnd.getDate() + 1);
+
+    const bucketChecks = checks.filter((check) => {
+      const timestamp = new Date(check.checked_at).getTime();
+
+      return (
+        Number.isFinite(timestamp) &&
+        timestamp >= bucketStart.getTime() &&
+        timestamp < bucketEnd.getTime() &&
+        timestamp <= now
+      );
+    });
+
+    return {
+      date: bucketStart.toISOString(),
+      label: new Intl.DateTimeFormat("fr-FR", {
+        day: "2-digit",
+        month: "2-digit",
+      }).format(bucketStart),
+      availability: getAvailability(bucketChecks),
+      total: bucketChecks.length,
+    };
+  });
+}
 
 function buildChart(data) {
   const width = 760;
@@ -61,7 +148,12 @@ function buildChart(data) {
   };
 }
 
-export default function DashboardCharts({ data = [] }) {
+export default function DashboardCharts({ checks = [] }) {
+  const [period, setPeriod] = useState("30d");
+  const data = useMemo(
+    () => buildSeries(checks, period, Date.now()),
+    [checks, period],
+  );
   const chart = buildChart(data);
   const yLevels = [0, 25, 50, 75, 100];
 
@@ -71,15 +163,43 @@ export default function DashboardCharts({ data = [] }) {
       .join(" "),
   );
 
-  const xLabels = [0, 7, 14, 21, 29]
-    .map((index) => ({ index, item: data[index] }))
-    .filter(({ item }) => item);
+  const labelCount = 5;
+  const xLabels = Array.from({ length: labelCount }, (_, index) => {
+    const dataIndex = Math.round(
+      (index * (data.length - 1)) / (labelCount - 1),
+    );
+
+    return { index: dataIndex, item: data[dataIndex] };
+  }).filter(
+    ({ item }, index, labels) =>
+      item && labels.findIndex((label) => label.item.date === item.date) === index,
+  );
+
+  const selectedPeriod = PERIODS.find((item) => item.value === period);
 
   return (
     <div className={styles.chart}>
-      <div className={styles.legend}>
-        <span className={styles.legendDot} />
-        Disponibilité quotidienne
+      <div className={styles.chartToolbar}>
+        <span className={styles.legend}>
+          <span className={styles.legendDot} />
+          Disponibilité
+        </span>
+
+        <div className={styles.periodSelector} aria-label="Période du graphique">
+          {PERIODS.map((item) => (
+            <button
+              type="button"
+              key={item.value}
+              className={`${styles.periodButton} ${
+                item.value === period ? styles.periodButtonActive : ""
+              }`}
+              aria-pressed={item.value === period}
+              onClick={() => setPeriod(item.value)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className={styles.scroll}>
@@ -87,7 +207,7 @@ export default function DashboardCharts({ data = [] }) {
           className={styles.svg}
           viewBox={`0 0 ${chart.width} ${chart.height}`}
           role="img"
-          aria-label="Disponibilité quotidienne sur 30 jours"
+          aria-label={`Disponibilité sur ${selectedPeriod.label}`}
         >
           {yLevels.map((level) => {
             const y = chart.top + chart.plotHeight * (1 - level / 100);

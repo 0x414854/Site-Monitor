@@ -2,6 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
+import { getUserSubscription } from "@/utils/subscriptions";
+import {
+  isPlatformAdmin,
+  syncPlatformAdminAccount,
+} from "@/utils/platform-admin";
 
 function slugify(value) {
   return (
@@ -71,6 +76,47 @@ export async function createWebsite(formData) {
     return { error: "L'adresse e-mail est invalide." };
   }
 
+  const platformAdmin = isPlatformAdmin(user);
+  let subscription;
+
+  try {
+    if (platformAdmin) {
+      await syncPlatformAdminAccount(user);
+    } else {
+      subscription = await getUserSubscription(user.id);
+    }
+  } catch (error) {
+    console.error("Vérification du forfait ou du compte admin :", error);
+    return {
+      error: platformAdmin
+        ? "Impossible de vérifier les droits administrateur."
+        : "Impossible de vérifier les limites de ton forfait.",
+    };
+  }
+
+  if (!platformAdmin) {
+    if (subscription.maxSites < 1) {
+      return {
+        error: "Ton forfait ne permet pas d'ajouter des sites actuellement.",
+      };
+    }
+
+    const { count: siteCount, error: countError } = await supabase
+      .from("websites")
+      .select("id", { count: "exact", head: true });
+
+    if (countError) {
+      console.error("Comptage des sites actifs :", countError.message);
+      return { error: "Impossible de vérifier le nombre de sites du compte." };
+    }
+
+    if ((siteCount ?? 0) >= subscription.maxSites) {
+      return {
+        error: `La limite de ${subscription.maxSites} site${subscription.maxSites > 1 ? "s" : ""} de ton forfait ${subscription.plan.name} est atteinte. Change de forfait pour en ajouter.`,
+      };
+    }
+  }
+
   if (!/^https?:\/\//i.test(url)) {
     url = `https://${url}`;
   }
@@ -118,6 +164,11 @@ export async function createWebsite(formData) {
 
   if (error) {
     console.error("Création du site :", error.message);
+    if (error.code === "23514" && !platformAdmin) {
+      return {
+        error: `La limite de ${subscription.maxSites} site${subscription.maxSites > 1 ? "s" : ""} de ton forfait ${subscription.plan.name} est atteinte. Change de forfait pour en ajouter.`,
+      };
+    }
     return {
       error: "Impossible de créer le site. Vérifie les données.",
     };
@@ -160,6 +211,9 @@ export async function toggleWebsiteMonitoring(id, active) {
 
   if (error) {
     console.error("Erreur Supabase :", error);
+    if (error.code === "23514") {
+      return { error: "La limite de sites de ton forfait est atteinte." };
+    }
     return { error: "La base de données n'a pas pu modifier ce site." };
   }
 

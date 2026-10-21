@@ -1,0 +1,141 @@
+.userSection {
+  padding: 0;
+  overflow: hidden;
+}
+
+.search {
+  display: grid;
+  gap: 8px;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.11);
+}
+
+.search label {
+  color: #aab7cb;
+  font-size: 11px;
+}
+
+.search div {
+  display: flex;
+  gap: 8px;
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid rgba(148, 163, 184, 0.17);
+  border-radius: 8px;
+  outline: none;
+  background: #0b1120;
+  color: #e5edf8;
+  font: inherit;
+  font-size: 12px;
+}
+
+.search input:focus {
+  border-color: #7c9cff;
+}
+
+.search button {
+  padding: 0 14px;
+  border: 1px solid rgba(124, 156, 255, 0.25);
+  border-radius: 8px;
+  background: rgba(96, 145, 255, 0.12);
+  color: #c4d7ff;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.table th,
+.table td {
+  padding: 13px 16px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.09);
+  color: #c4d0e2;
+  font-size: 11px;
+  vertical-align: middle;
+}
+
+.table th {
+  color: #8796ad;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.table td strong,
+.table td small {
+  display: block;
+}
+
+.table td strong {
+  color: #e5edf8;
+  font-weight: 600;
+}
+
+.table td small {
+  max-width: 230px;
+  margin-top: 4px;
+  overflow: hidden;
+  color: #68778e;
+  font-size: 9px;
+  text-overflow: ellipsis;
+}
+
+.status {
+  display: inline-block;
+  padding: 5px 8px;
+  border: 1px solid rgba(124, 156, 255, 0.18);
+  border-radius: 999px;
+  color: #b8c8ed;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 30px !important;
+  color: #8796ad !important;
+  text-align: center;
+}
+
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  color: #8796ad;
+  font-size: 10px;
+}
+
+.pagination div {
+  display: flex;
+  gap: 14px;
+}
+
+.pagination a {
+  color: #a9c0ff;
+  text-decoration: none;
+}
+
+@media (max-width: 520px) {
+  .search,
+  .pagination {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .pagination {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
