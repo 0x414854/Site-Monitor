@@ -215,8 +215,11 @@ export default async function DashboardPage({ searchParams }) {
     finished_at,
     status,
     pages_checked,
+    links_discovered,
+    external_links_discovered,
     links_checked,
     findings_count,
+    result_reason,
     error_message,
     websites(client_name, url)
   `,

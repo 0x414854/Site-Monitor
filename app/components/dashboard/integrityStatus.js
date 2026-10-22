@@ -59,6 +59,34 @@ function scanStatusLabel(status) {
   );
 }
 
+function scanSort(a, b) {
+  const timeDifference =
+    new Date(b.started_at).getTime() - new Date(a.started_at).getTime();
+  return timeDifference || String(b.id).localeCompare(String(a.id));
+}
+
+function getScanReason(scan) {
+  if (scan.error_message) return scan.error_message;
+
+  return (
+    {
+      no_internal_links_found: "Aucun lien interne exploitable trouvé.",
+      html_unavailable:
+        "Le contenu HTML n’était pas disponible pour l’exploration.",
+      site_unreachable: "Le site n’a pas pu être joint.",
+      link_check_budget_reached:
+        "Le budget de vérification des liens a été atteint.",
+      request_budget_reached: "Le budget global de requêtes a été atteint.",
+      page_limit_reached: "La limite de pages a été atteinte.",
+      per_page_link_limit_reached:
+        "La limite de liens extraits par page a été atteinte.",
+      sitemap_limit_reached: "La limite du sitemap a été atteinte.",
+      sitemap_unavailable:
+        "Le sitemap n’a pas pu être lu ; les pages liées restent explorées.",
+    }[scan.result_reason] || null
+  );
+}
+
 export default function IntegrityStatus({ websites, scans, findings }) {
   const [selectedSite, setSelectedSite] = useState("all");
   const [selectedSeverity, setSelectedSeverity] = useState("all");
@@ -66,7 +94,7 @@ export default function IntegrityStatus({ websites, scans, findings }) {
   const latestScans = useMemo(() => {
     const map = new Map();
 
-    for (const scan of scans) {
+    for (const scan of [...scans].sort(scanSort)) {
       if (!map.has(scan.website_id)) {
         map.set(scan.website_id, scan);
       }
@@ -78,7 +106,7 @@ export default function IntegrityStatus({ websites, scans, findings }) {
   const latestCompletedScans = useMemo(() => {
     const map = new Map();
 
-    for (const scan of scans) {
+    for (const scan of [...scans].sort(scanSort)) {
       if (scan.status === "completed" && !map.has(scan.website_id)) {
         map.set(scan.website_id, scan);
       }
@@ -124,17 +152,14 @@ export default function IntegrityStatus({ websites, scans, findings }) {
     return matchesSite && matchesSeverity;
   });
 
-  const criticalCount = currentFindings.filter(
-    (item) => item.severity === "critical",
-  ).length;
-
-  const highCount = currentFindings.filter(
-    (item) => item.severity === "high",
-  ).length;
-
   const failedScans = [...latestScans.values()].filter(
     (scan) => scan.status === "failed",
   ).length;
+  const completedScans = latestCompletedScans.size;
+  const latestAnomalyCount = [...latestCompletedScans.values()].reduce(
+    (total, scan) => total + (scan.findings_count ?? 0),
+    0,
+  );
 
   return (
     <section className={styles.section}>
@@ -149,7 +174,7 @@ export default function IntegrityStatus({ websites, scans, findings }) {
         </div>
 
         <span className={styles.counter}>
-          {currentFindings.length} anomalies
+          {latestAnomalyCount} anomalies
         </span>
       </div>
 
@@ -160,13 +185,13 @@ export default function IntegrityStatus({ websites, scans, findings }) {
         </article>
 
         <article className={styles.summaryCard}>
-          <span>Anomalies critiques</span>
-          <strong className={styles.criticalText}>{criticalCount}</strong>
+          <span>Derniers scans terminés</span>
+          <strong>{completedScans}</strong>
         </article>
 
         <article className={styles.summaryCard}>
-          <span>Anomalies élevées</span>
-          <strong className={styles.highText}>{highCount}</strong>
+          <span>Anomalies persistées sur ces scans</span>
+          <strong>{latestAnomalyCount}</strong>
         </article>
 
         <article className={styles.summaryCard}>
@@ -178,6 +203,10 @@ export default function IntegrityStatus({ websites, scans, findings }) {
       <div className={styles.siteGrid}>
         {websites.map((site) => {
           const scan = latestScans.get(site.id);
+          const reason = scan ? getScanReason(scan) : null;
+          const isLegacyScan = scan?.links_discovered == null;
+          const displayCount = (value) =>
+            value == null ? "—" : value.toLocaleString("fr-FR");
 
           return (
             <article className={styles.siteCard} key={site.id}>
@@ -206,26 +235,44 @@ export default function IntegrityStatus({ websites, scans, findings }) {
                 <>
                   <div className={styles.scanMetrics}>
                     <div>
-                      <strong>{scan.pages_checked ?? 0}</strong>
-                      <span>Pages</span>
+                      <strong>{displayCount(scan.pages_checked)}</strong>
+                      <span>Pages parcourues</span>
                     </div>
                     <div>
-                      <strong>{scan.links_checked ?? 0}</strong>
-                      <span>Liens examinés</span>
+                      <strong>{displayCount(scan.links_discovered)}</strong>
+                      <span>Liens internes découverts</span>
                     </div>
                     <div>
-                      <strong>{scan.findings_count ?? 0}</strong>
+                      <strong>
+                        {displayCount(scan.external_links_discovered)}
+                      </strong>
+                      <span>Liens externes découverts</span>
+                    </div>
+                    <div>
+                      <strong>
+                        {isLegacyScan ? "—" : displayCount(scan.links_checked)}
+                      </strong>
+                      <span>Destinations vérifiées</span>
+                    </div>
+                    <div>
+                      <strong>{displayCount(scan.findings_count)}</strong>
                       <span>Anomalies</span>
                     </div>
                   </div>
 
                   <p className={styles.scanDate}>
-                    Dernier scan : {formatDate(scan.started_at)}
+                    Dernier scan :{" "}
+                    {formatDate(scan.finished_at || scan.started_at)}
                   </p>
 
-                  {scan.error_message && (
-                    <p className={styles.scanError}>{scan.error_message}</p>
+                  {reason && (
+                    <p className={styles.scanError}>{reason}</p>
                   )}
+                  <p className={styles.scanDefinition}>
+                    « Destinations vérifiées » compte les URL uniques pour
+                    lesquelles une requête HTTP a été tentée. Un zéro ne prouve
+                    pas que toutes les pages sont saines.
+                  </p>
                 </>
               ) : (
                 <p className={styles.noScan}>Aucun scan enregistré.</p>

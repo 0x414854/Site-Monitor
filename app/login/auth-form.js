@@ -439,11 +439,11 @@ export default function AuthForm({
                               Pour commencer
                             </span>
                           )}
-                          {isSelected && (
+                          {/* {isSelected && (
                             <span className={styles.selectedLabel}>
                               Sélectionné
                             </span>
-                          )}
+                          )} */}
                         </span>
 
                         <span className={styles.planPriceRow}>

@@ -127,7 +127,7 @@ export default async function WebsiteDetailPage({ params }) {
       ? supabase
           .from("website_integrity_scans")
           .select(
-            "id, website_id, started_at, finished_at, status, pages_checked, links_checked, findings_count, error_message",
+            "id, website_id, started_at, finished_at, status, pages_checked, links_discovered, external_links_discovered, links_checked, findings_count, result_reason, error_message",
           )
           .eq("website_id", website.id)
           .order("started_at", { ascending: false })
